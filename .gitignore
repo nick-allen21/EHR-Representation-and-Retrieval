@@ -1,0 +1,30 @@
+# Processed output data (large, regenerable)
+data/processed/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+*.env.local
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# GCP credentials (should never be committed)
+*.json
+!data/physionet.org/**/*.json

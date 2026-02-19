@@ -1,0 +1,33 @@
+# Data handling
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14.0
+
+# BigQuery (MIMIC-IV data access)
+google-cloud-bigquery>=3.12
+pandas-gbq>=0.19
+db-dtypes>=1.1
+
+# Config
+pyyaml>=6.0
+
+# ML — feature selection, classification, metrics
+scikit-learn>=1.3
+
+# Deep learning — representation learning, temporal modeling
+torch>=2.0
+transformers>=4.36
+
+# Retrieval baselines — semantic similarity (RAG)
+sentence-transformers>=2.2
+faiss-cpu>=1.7
+
+# LLM inference
+openai>=1.0
+
+# Evaluation
+rouge-score>=0.1.2
+
+# Visualization
+matplotlib>=3.7
+seaborn>=0.13

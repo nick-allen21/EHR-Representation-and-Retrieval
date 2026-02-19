@@ -1,0 +1,39 @@
+# Google Cloud / BigQuery configuration
+# Both collaborators share this GCP project.
+# Authenticate locally with: gcloud auth application-default login
+
+gcp_project_id: "ehr-representation-retrieval"  # Share GCP project_id
+
+# MIMIC-IV BigQuery dataset references (PhysioNet-hosted, read-only)
+# MIMIC-IV v3.1 uses versioned dataset names
+bigquery:
+  hosp_dataset: "physionet-data.mimiciv_3_1_hosp"
+  icu_dataset: "physionet-data.mimiciv_3_1_icu"
+  derived_dataset: "physionet-data.mimiciv_3_1_derived"
+  note_dataset: "physionet-data.mimiciv_note"
+
+# Tables used by extractors
+tables:
+  patients: "physionet-data.mimiciv_3_1_hosp.patients"
+  admissions: "physionet-data.mimiciv_3_1_hosp.admissions"
+  diagnoses_icd: "physionet-data.mimiciv_3_1_hosp.diagnoses_icd"
+  d_icd_diagnoses: "physionet-data.mimiciv_3_1_hosp.d_icd_diagnoses"
+  procedures_icd: "physionet-data.mimiciv_3_1_hosp.procedures_icd"
+  d_icd_procedures: "physionet-data.mimiciv_3_1_hosp.d_icd_procedures"
+  labevents: "physionet-data.mimiciv_3_1_hosp.labevents"
+  d_labitems: "physionet-data.mimiciv_3_1_hosp.d_labitems"
+  prescriptions: "physionet-data.mimiciv_3_1_hosp.prescriptions"
+  chartevents: "physionet-data.mimiciv_3_1_icu.chartevents"
+  d_items: "physionet-data.mimiciv_3_1_icu.d_items"
+  discharge: "physionet-data.mimiciv_note.discharge"
+
+# Local data paths
+data:
+  ehr_ds_qa_csv: "data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv"
+  ehr_ds_qa_json: "data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json"
+  output_dir: "data/processed"
+
+# Pipeline settings
+pipeline:
+  batch_size: 500
+  output_format: "parquet"  # "parquet" or "json"
