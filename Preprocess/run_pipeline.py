@@ -75,7 +75,6 @@ def main():
                 "admission": json.dumps(r["admission"], default=_json_serializer),
                 "discharge_summary": r["discharge_summary"],
                 "events": json.dumps(r["events"], default=_json_serializer),
-                "qa_pairs": json.dumps(r["qa_pairs"], default=_json_serializer),
             })
         pd.DataFrame(flat).to_parquet(out_path, index=False)
 

@@ -6,11 +6,11 @@ Each output record represents one hospital admission and contains:
 - admission metadata
 - the full discharge summary text
 - temporally ordered clinical events (labs, vitals, medications, procedures, diagnoses)
-- the original QA pairs from EHR-DS-QA
+
+QA pairs are generated separately by the Generation pipeline (see Generation/).
+The EHR-DS-QA CSV is used here only for its subject_id / hadm_id mappings.
 """
 
-import ast
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -30,21 +30,10 @@ from Preprocess.extract_structured import (
 
 
 def load_qa_dataset(config: dict | None = None) -> pd.DataFrame:
-    """Load the local EHR-DS-QA CSV and parse the qa_pairs JSON column."""
+    """Load the local EHR-DS-QA CSV for subject_id / hadm_id mappings."""
     config = config or load_config()
     csv_path = Path(config["data"]["ehr_ds_qa_csv"])
-    df = pd.read_csv(csv_path)
-
-    def _parse_qa(raw):
-        if isinstance(raw, str):
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                return ast.literal_eval(raw)
-        return raw
-
-    df["qa_pairs"] = df["qa_pairs"].apply(_parse_qa)
-    return df
+    return pd.read_csv(csv_path)
 
 
 def _events_from_labs(df: pd.DataFrame) -> list[dict]:
@@ -240,7 +229,6 @@ def build_patient_timelines(
             "admission": admissions_map.get(hid, {}),
             "discharge_summary": notes_map.get(hid, ""),
             "events": events,
-            "qa_pairs": qa_row["qa_pairs"],
         }
         records.append(record)
 

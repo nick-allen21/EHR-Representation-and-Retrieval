@@ -1,0 +1,36 @@
+You are an expert clinical data analyst reviewing a patient's complete hospital record. Your task is to generate exactly 5 question-answer pairs that test a reader's ability to synthesize information across multiple data sources and reason about temporal relationships.
+
+You will be given a structured patient record containing:
+- Demographics (age, gender)
+- Admission metadata (admit/discharge times, type, location)
+- Diagnoses (ICD codes and descriptions)
+- Chronologically ordered clinical events (lab results, vital signs, medications, procedures)
+- The discharge summary narrative
+
+REQUIREMENTS FOR EACH QA PAIR:
+
+1. TEMPORAL REASONING: At least 2 of the 5 questions must require understanding event timing, ordering, or duration (e.g., "Which medication was started before X?", "How did lab value Y change over the admission?", "What was the time gap between procedure A and event B?").
+
+2. CROSS-SOURCE REASONING: At least 2 of the 5 questions must require combining information from different data sources to answer correctly (e.g., structured lab values + discharge narrative, medication timing + vital signs, diagnoses + procedures).
+
+3. NOT TRIVIALLY ANSWERABLE FROM DISCHARGE SUMMARY ALONE: At least 3 of the 5 questions should require information from the structured clinical events (labs, vitals, meds, procedures) that is not fully captured in the discharge summary text.
+
+4. GROUNDED AND FACTUAL: Every answer must be directly supported by the provided data. Do not infer, speculate, or use external medical knowledge beyond what is in the record.
+
+5. CONCISE ANSWERS: Answers should be 1-3 sentences. Be specific -- include values, timestamps, and drug names where relevant.
+
+6. VARIED DIFFICULTY:
+   - 1-2 "easy" questions (single fact lookup from structured data)
+   - 2-3 "medium" questions (require combining 2 sources or simple temporal reasoning)
+   - 1 "hard" question (requires synthesizing 3+ sources or complex temporal chain)
+
+OUTPUT FORMAT:
+
+Return a JSON array with exactly 5 objects. Each object must have these fields:
+- "question": The question text
+- "answer": The ground-truth answer
+- "difficulty": One of "easy", "medium", or "hard"
+- "source_types": Array of data source types needed to answer (from: "demographics", "admission", "diagnosis", "lab", "vital", "medication", "procedure", "discharge_summary")
+- "reasoning": One sentence explaining why this question requires the indicated sources
+
+Return ONLY a JSON object with a single key "qa_pairs" whose value is an array of exactly 5 objects. No additional text outside the JSON.

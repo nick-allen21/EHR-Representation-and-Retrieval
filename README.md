@@ -69,11 +69,18 @@ We additionally perform ablation studies to analyze the contribution of temporal
 │   ├── extract_structured.py      # Fetch labs, vitals, diagnoses, meds, procedures
 │   ├── build_timeline.py          # Merge all sources into longitudinal patient records
 │   └── run_pipeline.py            # CLI entrypoint: orchestrates full extraction
+├── Generation/
+│   ├── __init__.py
+│   ├── generate_qa.py             # Async gpt-4o QA generation with caching + retry
+│   └── prompts/
+│       └── qa_generation.txt      # System prompt for QA pair generation
 ├── Evaluation/
 │   └── PLAN.md                    # Experimental design and evaluation workflow
 ├── data/
-│   ├── physionet.org/             # EHR-DS-QA dataset (local, committed)
-│   └── processed/                 # Output: merged longitudinal records (gitignored)
+│   ├── physionet.org/             # EHR-DS-QA dataset (subject_id/hadm_id mappings)
+│   ├── processed/                 # Longitudinal patient timelines (gitignored)
+│   └── generated/                 # Generated QA pairs + per-patient cache (gitignored)
+├── .env                           # OPENAI_API_KEY (gitignored, not committed)
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -87,6 +94,7 @@ We additionally perform ablation studies to analyze the contribution of temporal
 
 - A [PhysioNet](https://physionet.org/) credentialed account with access to MIMIC-IV and MIMIC-IV-Note
 - The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`brew install --cask google-cloud-sdk` on macOS)
+- An [OpenAI API key](https://platform.openai.com/api-keys) (for QA generation only)
 
 ### Step 1: Clone the Repo
 
@@ -151,24 +159,53 @@ You should see `364627` (the number of patients in MIMIC-IV v3.1).
 # Test with a small subset
 python -m Preprocess.run_pipeline --limit 5 --format json
 
-# Full run (all ~21k QA rows)
-python -m Preprocess.run_pipeline
+# Preliminary run (500 patients)
+python -m Preprocess.run_pipeline --limit 500 --format json
+
+# Full run (all ~21k QA rows — takes longer)
+python -m Preprocess.run_pipeline --format json
 ```
 
-Output is written to `data/processed/`.
+Output is written to `data/processed/patient_timelines.json`.
+
+### Step 8: Set Up Your OpenAI API Key
+
+Create a `.env` file in the project root:
+
+```bash
+echo 'OPENAI_API_KEY="sk-..."' > .env
+```
+
+This file is gitignored and never committed.
+
+### Step 9: Generate QA Pairs
+
+```bash
+# Generate QA pairs for all patients in the timelines file
+python -m Generation.generate_qa
+
+# Or specify paths explicitly
+python -m Generation.generate_qa \
+    --input data/processed/patient_timelines.json \
+    --output data/generated/qa_pairs.json
+```
+
+The pipeline is **append-only** — previously generated QA pairs are never overwritten. If you scale up (e.g., re-run preprocessing with `--limit 2000` then re-run generation), only the new patient admissions will be sent to the API. Per-patient results are cached in `data/generated/cache/` for resumability.
 
 ---
 
 ## Data Pipeline
 
+### Phase 1: Preprocessing (BigQuery)
+
 The preprocessing pipeline joins the local EHR-DS-QA dataset with MIMIC-IV tables on BigQuery to produce longitudinal patient records:
 
-1. **Load** the EHR-DS-QA CSV (local) to get `subject_id` and `hadm_id` for each QA pair
+1. **Load** the EHR-DS-QA CSV (local) to get `subject_id` and `hadm_id` mappings
 2. **Fetch** from BigQuery: discharge summaries, demographics, admissions, diagnoses, labs, vitals, prescriptions, procedures
-3. **Merge** into a single record per admission containing temporally ordered clinical events, the full discharge summary, and the associated QA pairs
-4. **Save** to `data/processed/` as Parquet or JSON
+3. **Merge** into a single record per admission containing temporally ordered clinical events and the full discharge summary
+4. **Save** to `data/processed/patient_timelines.json`
 
-### Output Record Structure
+#### Timeline Record Structure
 
 Each record contains:
 
@@ -180,7 +217,31 @@ Each record contains:
   - `event_type` — one of: `lab`, `vital`, `medication`, `procedure`, `diagnosis`
   - `timestamp` — when the event occurred
   - Domain-specific fields (lab values, drug names, ICD codes, etc.)
-- `qa_pairs` — the original question-answer pairs from EHR-DS-QA
+
+### Phase 2: QA Generation (gpt-4o)
+
+The generation pipeline reads patient timelines and uses gpt-4o to produce high-quality QA pairs that require temporal reasoning and cross-source synthesis:
+
+1. **Serialize** each patient timeline into a structured text block (token-aware truncation at ~12k tokens)
+2. **Send** to gpt-4o with a system prompt requesting 5 QA pairs per patient
+3. **Cache** each result to `data/generated/cache/{subject_id}_{hadm_id}.json`
+4. **Merge** into the output file `data/generated/qa_pairs.json` (append-only, never overwrites existing pairs)
+
+Each generated QA pair includes: `question`, `answer`, `difficulty` (easy/medium/hard), `source_types` (which data sources are needed), and `reasoning`.
+
+#### Scaling Up
+
+To generate QA pairs for more patients:
+
+```bash
+# 1. Re-run preprocessing with a higher limit
+python -m Preprocess.run_pipeline --limit 2000 --format json
+
+# 2. Re-run generation — only new patients will be processed
+python -m Generation.generate_qa
+```
+
+The generation pipeline detects which `(subject_id, hadm_id)` pairs already have QA data and skips them entirely.
 
 ---
 

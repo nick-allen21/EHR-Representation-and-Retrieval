@@ -1,5 +1,6 @@
 # Processed output data (large, regenerable)
 data/processed/
+data/generated/
 
 # Python
 __pycache__/
