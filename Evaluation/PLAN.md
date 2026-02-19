@@ -1,0 +1,148 @@
+# Evaluation Plan: Learned EHR Representations vs. Heuristic Baselines
+
+## Overview
+
+All experiments hold the LLM fixed (e.g., `o4-mini`) and vary only the **EHR context** provided to it. The task is question-answering over patient records from the EHR-DS-QA dataset. We measure whether learned context selection outperforms heuristic retrieval under a fixed token budget.
+
+---
+
+## Input Data
+
+Each record in `data/processed/patient_timelines.json` contains:
+- `discharge_summary` — full text of the discharge note
+- `events` — temporally sorted structured clinical events (labs, vitals, meds, procedures, diagnoses)
+- `demographics` / `admission` — patient and encounter metadata
+- `qa_pairs` — ground-truth question-answer pairs
+
+The verified subset (~500 pairs with clinician `correct` flags) is the primary test set. The remaining ~21k synthetic pairs can be used for training the learned selector.
+
+---
+
+## Baselines
+
+### Baseline 1: Discharge Summary Only
+
+Feed the discharge summary text + question to the LLM. No structured data, no retrieval. This is the simplest approach and represents current practice.
+
+**Context**: `discharge_summary`
+
+### Baseline 2: Full Context (Everything)
+
+Serialize all available data — demographics, admission, all events, discharge summary — into a single text prompt. Tests whether more information helps or hurts (context overload).
+
+**Context**: `demographics` + `admission` + `events` (all) + `discharge_summary`
+
+### Baseline 3: Recency-Based Filtering
+
+Include only the N most recent events (by timestamp) before discharge, plus the discharge summary. Tests a simple temporal heuristic.
+
+**Context**: `discharge_summary` + last N events (vary N = 10, 25, 50, 100)
+
+### Baseline 4: Semantic Similarity Retrieval (Traditional RAG)
+
+Embed each event as a text chunk using a sentence-transformer model. For each question, retrieve the top-k most similar chunks by cosine similarity. Feed those + the discharge summary to the LLM.
+
+**Context**: `discharge_summary` + top-k retrieved events (vary k = 5, 10, 25)
+
+---
+
+## Learned Approaches
+
+### Approach A: L1-Regularized Feature Selection
+
+Train a sparse linear model that scores each event's relevance to the QA task. Events above a learned threshold are included in the context. The sparsity penalty controls the context budget.
+
+- Features: event type, timestamp relative to admission/discharge, lab value flags, medication categories
+- Training signal: whether the LLM answers correctly given the selected subset
+- Regularization: L1 penalty to enforce sparse selection
+
+### Approach B: Temporal Attention Selector
+
+Encode the event sequence with a lightweight temporal model (e.g., small transformer or GRU) that produces per-event importance scores. Select top-k events by score.
+
+- Input: event embeddings + positional/temporal encodings
+- Output: per-event relevance score
+- Training: optimize for downstream QA accuracy under a budget constraint
+
+---
+
+## Evaluation Metrics
+
+### Primary: QA Accuracy
+
+For each (question, gold_answer) pair, generate the LLM's answer given the selected context, then score:
+
+- **ROUGE-L**: text overlap between generated and gold answer
+- **LLM-as-Judge**: a second LLM rates correctness on a 1-5 scale (using a rubric prompt)
+- **Exact Match / F1**: token-level overlap for factoid-style questions
+
+### Secondary: Context Efficiency
+
+- **Tokens Used**: count the prompt tokens for each method
+- **Accuracy vs. Token Budget Curve**: plot QA accuracy as a function of context size across all methods — the goal is to achieve high accuracy with fewer tokens
+- **Compression Ratio**: (tokens used by method) / (tokens in full context)
+
+### Ablations
+
+- Temporal modeling contribution: compare learned selector with vs. without timestamp features
+- Sparsity strength: vary L1 penalty and measure accuracy/context trade-off
+- Event type contribution: ablate individual event types (labs only, meds only, etc.)
+
+---
+
+## Experiment Pipeline (proposed modules)
+
+```
+Evaluation/
+├── PLAN.md                    # This file
+├── context_builders.py        # Functions that produce LLM prompts for each baseline/method
+├── llm_runner.py              # Send prompts to LLM, collect responses
+├── scoring.py                 # ROUGE, LLM-as-judge, exact match scoring
+├── run_baselines.py           # CLI: run all baselines on test set, save results
+├── run_learned.py             # CLI: run learned selector experiments
+└── analysis.py                # Generate tables, plots, efficiency curves
+```
+
+### context_builders.py
+
+One function per strategy. Each takes a patient record + question and returns a formatted prompt string:
+
+- `build_discharge_only_prompt(record, question) -> str`
+- `build_full_context_prompt(record, question) -> str`
+- `build_recency_prompt(record, question, n=25) -> str`
+- `build_rag_prompt(record, question, k=10, embedder=...) -> str`
+- `build_learned_prompt(record, question, selector=...) -> str`
+
+### llm_runner.py
+
+Thin wrapper around the OpenAI API. Takes a prompt, returns the LLM's answer. Handles rate limiting, retries, and response caching (to avoid re-running identical prompts).
+
+### scoring.py
+
+- `rouge_score(predicted, gold) -> dict`
+- `llm_judge_score(question, predicted, gold) -> int` (1-5 scale)
+- `exact_match(predicted, gold) -> bool`
+
+### run_baselines.py
+
+```bash
+python -m Evaluation.run_baselines --method discharge_only --split verified
+python -m Evaluation.run_baselines --method full_context --split verified
+python -m Evaluation.run_baselines --method recency --n 25 --split verified
+python -m Evaluation.run_baselines --method rag --k 10 --split verified
+```
+
+Outputs results to `data/results/<method>_<params>.json`.
+
+---
+
+## Execution Order
+
+1. Run preprocessing pipeline to generate `data/processed/patient_timelines.json`
+2. Implement `context_builders.py` and `scoring.py`
+3. Run Baseline 1 (discharge only) as the floor
+4. Run Baseline 2 (full context) as the ceiling
+5. Run Baselines 3-4 (recency, RAG)
+6. Train learned selectors (Approaches A/B)
+7. Run learned methods and compare
+8. Generate efficiency curves and ablation analysis

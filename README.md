@@ -51,7 +51,7 @@ We evaluate whether **learned EHR representations improve downstream LLM perform
 
 ### Data
 
-All experiments are conducted on the [MIMIC-IV](https://physionet.org/content/mimiciv/) dataset. We use the [EHR-DS-QA](https://physionet.org/content/ehr-ds-qa/1.0.0/) dataset which contains physician-evaluated question-answer pairs grounded in MIMIC-IV discharge summaries.
+All experiments are conducted on the [MIMIC-IV v3.1](https://physionet.org/content/mimiciv/3.1/) dataset. We use the [EHR-DS-QA](https://physionet.org/content/ehr-ds-qa/1.0.0/) dataset (~21k QA pairs, ~500 physician-verified) grounded in MIMIC-IV discharge summaries.
 
 We additionally perform ablation studies to analyze the contribution of temporal modeling and sparsity constraints, as well as qualitative error analysis to identify failure modes and limitations.
 
@@ -69,6 +69,8 @@ We additionally perform ablation studies to analyze the contribution of temporal
 │   ├── extract_structured.py      # Fetch labs, vitals, diagnoses, meds, procedures
 │   ├── build_timeline.py          # Merge all sources into longitudinal patient records
 │   └── run_pipeline.py            # CLI entrypoint: orchestrates full extraction
+├── Evaluation/
+│   └── PLAN.md                    # Experimental design and evaluation workflow
 ├── data/
 │   ├── physionet.org/             # EHR-DS-QA dataset (local, committed)
 │   └── processed/                 # Output: merged longitudinal records (gitignored)
@@ -79,60 +81,78 @@ We additionally perform ablation studies to analyze the contribution of temporal
 
 ---
 
-## Setup
+## Getting Started (for collaborators)
 
-### 1. Prerequisites
+### Prerequisites
 
-- A [PhysioNet](https://physionet.org/) credentialed account with access to MIMIC-IV
-- A Google Cloud Platform project (free tier works) linked to your PhysioNet account
-- The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) installed locally
+- A [PhysioNet](https://physionet.org/) credentialed account with access to MIMIC-IV and MIMIC-IV-Note
+- The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`brew install --cask google-cloud-sdk` on macOS)
 
-### 2. Link PhysioNet to BigQuery
+### Step 1: Clone the Repo
 
-1. Go to https://physionet.org/settings/cloud/ and link your GCP account
-2. Accept the data use agreement for MIMIC-IV on BigQuery
-3. Both collaborators should be added to the shared GCP project via **IAM & Admin > Grant Access** (Editor role)
+```bash
+git clone https://github.com/<your-org>/EHR-Representation-and-Retrieval.git
+cd EHR-Representation-and-Retrieval
+```
 
-### 3. Create a Conda Environment
+### Step 2: Create a Conda Environment
 
 ```bash
 conda create -n ehr python=3.11 -y
 conda activate ehr
-```
-
-### 4. Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 5. Authenticate with Google Cloud
+### Step 3: Link PhysioNet to Google Cloud
+
+1. Go to https://physionet.org/settings/cloud/
+2. Under **Google Cloud Platform**, enter your Google email (must be the same email added to the shared GCP project)
+3. Click **Save**
+4. Request BigQuery access on each dataset page:
+   - https://physionet.org/content/mimiciv/3.1/ (MIMIC-IV core)
+   - https://physionet.org/content/mimic-iv-note/2.2/ (MIMIC-IV-Note)
+   - Look for the **BigQuery** section and accept the data use agreement
+
+### Step 4: Get Added to the GCP Project
+
+Ask a project owner to add your Google email to the shared GCP project `ehr-representation-retrieval` via **IAM & Admin > Grant Access** with the **BigQuery Job User** role. (If you're the owner, this is already done.)
+
+### Step 5: Authenticate Locally
 
 ```bash
+# Log in to gcloud with the SAME email you linked to PhysioNet
+gcloud auth login <your-email>
+gcloud config set account <your-email>
+gcloud config set project ehr-representation-retrieval
+
+# Set up Application Default Credentials for Python
 gcloud auth application-default login
+gcloud auth application-default set-quota-project ehr-representation-retrieval
 ```
 
-This stores credentials locally — no API keys or service account files needed. Each collaborator runs this once on their machine.
+When the browser opens, sign in with the email that is linked to PhysioNet (this is the identity that has read access to the `physionet-data` BigQuery tables).
 
-### 6. Configure the Project
-
-Edit `config/config.yaml` and set your shared GCP project ID:
-
-```yaml
-gcp_project_id: "your-gcp-project-id"
-```
-
-### 7. Run the Pipeline
+### Step 6: Verify the Connection
 
 ```bash
+python -c "
+from Preprocess.bigquery_client import get_client
+client = get_client()
+result = client.query('SELECT COUNT(*) as n FROM \`physionet-data.mimiciv_3_1_hosp.patients\`').to_dataframe()
+print(result)
+"
+```
+
+You should see `364627` (the number of patients in MIMIC-IV v3.1).
+
+### Step 7: Run the Preprocessing Pipeline
+
+```bash
+# Test with a small subset
+python -m Preprocess.run_pipeline --limit 5 --format json
+
 # Full run (all ~21k QA rows)
 python -m Preprocess.run_pipeline
-
-# Test with a subset
-python -m Preprocess.run_pipeline --limit 10
-
-# Output as JSON instead of Parquet
-python -m Preprocess.run_pipeline --format json
 ```
 
 Output is written to `data/processed/`.
@@ -147,3 +167,27 @@ The preprocessing pipeline joins the local EHR-DS-QA dataset with MIMIC-IV table
 2. **Fetch** from BigQuery: discharge summaries, demographics, admissions, diagnoses, labs, vitals, prescriptions, procedures
 3. **Merge** into a single record per admission containing temporally ordered clinical events, the full discharge summary, and the associated QA pairs
 4. **Save** to `data/processed/` as Parquet or JSON
+
+### Output Record Structure
+
+Each record contains:
+
+- `subject_id`, `hadm_id`, `note_id` — identifiers
+- `demographics` — gender, age, date of death
+- `admission` — admit/discharge times, location, insurance, etc.
+- `discharge_summary` — full text of the discharge note
+- `events` — temporally sorted list of clinical events, each with:
+  - `event_type` — one of: `lab`, `vital`, `medication`, `procedure`, `diagnosis`
+  - `timestamp` — when the event occurred
+  - Domain-specific fields (lab values, drug names, ICD codes, etc.)
+- `qa_pairs` — the original question-answer pairs from EHR-DS-QA
+
+---
+
+## Troubleshooting
+
+**403 Access Denied on BigQuery tables**: Make sure (1) your `gcloud auth list` shows the email linked to PhysioNet as active, and (2) you've requested BigQuery access on the PhysioNet dataset pages. Run `gcloud auth application-default login` and sign in with the correct email.
+
+**"BigQuery Storage module not found" warning**: Harmless. Install `google-cloud-bigquery-storage` to silence it, but it's not required.
+
+**Slow queries**: The `--limit N` flag restricts how many QA rows are processed (and therefore how many patients are queried). Use `--limit 10` for testing.
