@@ -30,10 +30,9 @@ tables:
 # Local data paths
 data:
   ehr_ds_qa_csv: "data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv"
-  ehr_ds_qa_json: "data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json"
   output_dir: "data/processed"
 
 # Pipeline settings
 pipeline:
   batch_size: 500
-  output_format: "parquet"  # "parquet" or "json"
+  output_format: "json"  # "parquet" or "json"
