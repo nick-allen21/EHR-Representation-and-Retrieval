@@ -119,9 +119,14 @@ def _events_from_diagnoses(df: pd.DataFrame) -> list[dict]:
 def build_patient_timelines(
     config: dict | None = None,
     client: bigquery.Client | None = None,
+    limit: int | None = None,
 ) -> list[dict]:
     """Main entry point: build longitudinal records for every admission in the
     QA dataset.
+
+    Args:
+        limit: If set, only process the first N QA rows (applied before
+               querying BigQuery so that test runs are fast).
 
     Returns a list of dicts, one per (subject_id, hadm_id) pair.
     """
@@ -131,6 +136,10 @@ def build_patient_timelines(
 
     # 1. Load local QA data
     qa_df = load_qa_dataset(config)
+
+    if limit is not None:
+        qa_df = qa_df.head(limit)
+
     subject_ids = qa_df["subject_id"].unique().tolist()
     hadm_ids = qa_df["hadm_id"].unique().tolist()
 

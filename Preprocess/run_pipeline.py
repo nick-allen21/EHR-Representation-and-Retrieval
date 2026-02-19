@@ -5,6 +5,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 from pathlib import Path
 
@@ -15,11 +16,17 @@ from Preprocess.build_timeline import build_patient_timelines
 
 
 def _json_serializer(obj):
-    """Handle pandas Timestamps and other non-serializable types."""
-    if isinstance(obj, pd.Timestamp):
+    """Handle pandas Timestamps, dates, and other non-serializable types."""
+    if isinstance(obj, (pd.Timestamp, datetime.datetime)):
         return obj.isoformat()
+    if isinstance(obj, datetime.date):
+        return obj.isoformat()
+    if isinstance(obj, datetime.timedelta):
+        return str(obj)
     if hasattr(obj, "item"):
         return obj.item()
+    if pd.isna(obj):
+        return None
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
@@ -48,10 +55,9 @@ def main():
     out_dir = Path(config["data"]["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    records = build_patient_timelines(config=config, client=client)
-
-    if args.limit:
-        records = records[: args.limit]
+    records = build_patient_timelines(
+        config=config, client=client, limit=args.limit
+    )
 
     if out_format == "json":
         out_path = out_dir / "patient_timelines.json"
