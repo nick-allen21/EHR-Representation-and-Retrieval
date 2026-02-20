@@ -42,8 +42,10 @@ def cmd_train(args: argparse.Namespace) -> None:
     from Logreg.data_loader import load_and_merge
     from Logreg.train import run_training
 
+    include_events = not args.discharge_only
     print(f"Loading data …\n  timelines : {args.timelines}\n  qa data   : {args.qa_data}")
-    records = load_and_merge(args.timelines, args.qa_data)
+    print(f"  mode      : {'discharge only' if args.discharge_only else 'discharge + structured events'}")
+    records = load_and_merge(args.timelines, args.qa_data, include_events=include_events)
 
     if args.limit:
         records = records[: args.limit]
@@ -68,11 +70,12 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     from Logreg.data_loader import load_and_merge
     from Logreg.selector import ChunkSelector
 
+    include_events = not args.discharge_only
     print(f"Loading selector from {args.model_dir} …")
     selector = ChunkSelector.load(args.model_dir, strategy=args.strategy)
 
     print(f"Loading data …")
-    records = load_and_merge(args.timelines, args.qa_data)
+    records = load_and_merge(args.timelines, args.qa_data, include_events=include_events)
     if args.limit:
         records = records[: args.limit]
 
@@ -143,6 +146,9 @@ def _add_data_args(p: argparse.ArgumentParser) -> None:
                    help="Directory to save/load model artifacts")
     p.add_argument("--strategy",  default="section", choices=["section", "fixed"],
                    help="Chunking strategy (default: section)")
+    p.add_argument("--discharge-only", action="store_true",
+                   help="Use only the discharge summary as note text (no structured events). "
+                        "Cross-source QA pairs will be filtered out.")
 
 
 def main() -> None:
@@ -157,7 +163,7 @@ def main() -> None:
     _add_data_args(p_train)
     p_train.add_argument("--C",               type=float, default=1.0,
                          help="Inverse L1 regularization strength (smaller → sparser model)")
-    p_train.add_argument("--label-threshold", type=float, default=0.2,
+    p_train.add_argument("--label-threshold", type=float, default=0.15,
                          help="Min token F1 overlap for a chunk to be labeled positive")
     p_train.add_argument("--no-embeddings",   action="store_true",
                          help="Disable sentence-transformer embeddings (faster, ~5%% lower accuracy)")
@@ -169,7 +175,7 @@ def main() -> None:
     _add_data_args(p_eval)
     p_eval.add_argument("--K",               type=int,   default=5,
                         help="Number of chunks to select per question")
-    p_eval.add_argument("--label-threshold", type=float, default=0.2)
+    p_eval.add_argument("--label-threshold", type=float, default=0.15)
     p_eval.add_argument("--output",          type=str,   default=None,
                         help="Save results JSON to this path")
     p_eval.add_argument("--limit",           type=int,   default=None)

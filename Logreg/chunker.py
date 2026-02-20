@@ -37,13 +37,16 @@ _SECTION_MAP: list[tuple[re.Pattern, str]] = [
     (re.compile(r"physical\s+exam",             re.I), "exam"),
     (re.compile(r"pertinent\s+result",          re.I), "results"),
     (re.compile(r"(brief\s+)?hospital\s+course",re.I), "hospital_course"),
-    (re.compile(r"medication",                  re.I), "medications"),
+    (re.compile(r"medication|drug",             re.I), "medications"),
     (re.compile(r"discharge\s+diag",            re.I), "diagnosis"),
     (re.compile(r"discharge\s+cond",            re.I), "discharge_condition"),
     (re.compile(r"discharge\s+disp",            re.I), "discharge_disposition"),
     (re.compile(r"discharge\s+instruct",        re.I), "discharge_instructions"),
     (re.compile(r"follow\s*[-–]?\s*up",         re.I), "followup"),
     (re.compile(r"lab|laboratory",              re.I), "labs"),
+    (re.compile(r"vital\s*sign",                re.I), "vitals"),
+    (re.compile(r"procedure|surger|operation",  re.I), "procedure"),
+    (re.compile(r"diagnos",                     re.I), "diagnosis"),
 ]
 
 # All known section category names (order matters — used for one-hot encoding)
@@ -64,6 +67,8 @@ SECTION_CATEGORIES: list[str] = [
     "discharge_disposition",
     "social",
     "family",
+    "vitals",
+    "procedure",
     "other",
 ]
 
@@ -77,11 +82,18 @@ def _classify_section(header_text: str) -> str:
 
 # ── Section-based chunking ────────────────────────────────────────────────────
 
-def split_by_sections(note_text: str) -> list[dict]:
+def split_by_sections(
+    note_text: str,
+    max_section_tokens: int = 200,
+) -> list[dict]:
     """Split a discharge summary on section headers.
 
     Falls back to the whole note as a single chunk if fewer than 3 sections
     are detected (malformed / very short note).
+
+    Sections exceeding *max_section_tokens* are automatically sub-split into
+    overlapping fixed-size windows so that token-F1 weak supervision works
+    well even for long sections (e.g., Hospital Course, large lab blocks).
     """
     sections: list[tuple[str, str]] = []   # (raw_header, body_text)
     current_header = "preamble"
@@ -103,22 +115,38 @@ def split_by_sections(note_text: str) -> list[dict]:
         sections.append((current_header, body))
 
     if len(sections) < 3:
-        # Section parsing failed (note lacks clear headers) — fall back to
-        # fixed-size token windows so we still get multiple retrievable chunks.
-        # Section category stays "other" for all; position/chunk_idx still computed.
         return split_fixed_size(note_text)
 
-    total = len(sections)
-    return [
-        {
-            "text":           text,
-            "section":        _classify_section(header),
-            "section_header": header,
-            "position":       idx / max(total - 1, 1),
-            "chunk_idx":      idx,
-        }
-        for idx, (header, text) in enumerate(sections)
-    ]
+    # Build chunk list, sub-splitting oversized sections
+    result: list[dict] = []
+    for header, text in sections:
+        section_cat = _classify_section(header)
+        n_tokens = len(text.split())
+
+        if n_tokens > max_section_tokens:
+            sub_chunks = split_fixed_size(
+                text, chunk_tokens=200, stride=100,
+            )
+            for sc in sub_chunks:
+                sc["section"] = section_cat
+                sc["section_header"] = header
+            result.extend(sub_chunks)
+        else:
+            result.append({
+                "text":           text,
+                "section":        section_cat,
+                "section_header": header,
+                "position":       0.0,
+                "chunk_idx":      0,
+            })
+
+    # Recompute position and chunk_idx across the flattened list
+    total = len(result)
+    for idx, chunk in enumerate(result):
+        chunk["position"]  = idx / max(total - 1, 1)
+        chunk["chunk_idx"] = idx
+
+    return result
 
 
 # ── Fixed-size chunking ───────────────────────────────────────────────────────

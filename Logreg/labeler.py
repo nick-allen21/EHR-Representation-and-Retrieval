@@ -42,7 +42,7 @@ def token_f1(text_a: str, text_b: str) -> float:
 def label_chunks(
     chunks: list[dict],
     answer: str,
-    threshold: float = 0.2,
+    threshold: float = 0.15,
 ) -> list[int]:
     """Return a binary label per chunk based on token F1 overlap with the answer.
 

@@ -139,9 +139,9 @@ def train_model(
     negative-majority class imbalance even after negative sampling.
     """
     model = LogisticRegression(
-        penalty="l1",
         solver="liblinear",
         C=C,
+        l1_ratio=1.0,
         max_iter=1000,
         random_state=random_seed,
         class_weight="balanced",

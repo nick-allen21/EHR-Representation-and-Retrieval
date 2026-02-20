@@ -103,7 +103,7 @@ class ChunkSelector:
         note_text: str,
         answer: str,
         K: int = 5,
-        label_threshold: float = 0.2,
+        label_threshold: float = 0.15,
     ) -> float:
         """Compute Recall@K for a single (question, note, answer) triple.
 
