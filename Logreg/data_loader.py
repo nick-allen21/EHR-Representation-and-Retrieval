@@ -17,6 +17,7 @@ structured events (labs, meds, vitals, procedures, diagnoses).  This ensures
 that gpt-4o generated answers — which reference specific event values — appear
 in the text that gets chunked, enabling weak supervision via token overlap.
 
+
 Pass include_events=False to use only the discharge summary (original behavior).
 
 No BigQuery or network calls happen here. All data loading is local file I/O.
