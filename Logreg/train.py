@@ -24,9 +24,17 @@ import json
 import pickle
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import (
+    average_precision_score,
+    precision_recall_curve,
+    roc_auc_score,
+    roc_curve,
+)
 
 from Logreg.chunker import chunk_note
 from Logreg.features import FeatureExtractor
@@ -229,6 +237,113 @@ def per_question_recall_at_k(
     }
 
 
+# ── Plotting ─────────────────────────────────────────────────────────────────
+
+def _save_plots(
+    model: LogisticRegression,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    feat_names: list[str],
+    recall_metrics: dict[str, float],
+    output_dir: Path,
+) -> None:
+    """Generate and save diagnostic plots to *output_dir*/plots/."""
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    y_prob = model.predict_proba(X_val)[:, 1]
+    y_int  = y_val.astype(int)
+
+    # ── 1. Feature importance (top 20 non-zero) ─────────────────────────────
+    coef = model.coef_[0]
+    nonzero_mask = coef != 0
+    nz_idx   = np.where(nonzero_mask)[0]
+    nz_coef  = coef[nz_idx]
+    nz_names = [feat_names[i] for i in nz_idx]
+
+    top_n = min(20, len(nz_idx))
+    top   = np.argsort(np.abs(nz_coef))[-top_n:]
+    top   = top[np.argsort(nz_coef[top])]
+
+    fig, ax = plt.subplots(figsize=(8, max(4, top_n * 0.35)))
+    colors = ["#e74c3c" if nz_coef[i] < 0 else "#2ecc71" for i in top]
+    ax.barh([nz_names[i] for i in top], nz_coef[top], color=colors)
+    ax.set_xlabel("L1 Logistic Regression Coefficient")
+    ax.set_title(f"Top {top_n} Feature Weights ({int(nonzero_mask.sum())}/{len(coef)} non-zero)")
+    ax.axvline(0, color="black", linewidth=0.5)
+    fig.tight_layout()
+    fig.savefig(plots_dir / "feature_importance.png", dpi=150)
+    plt.close(fig)
+
+    # ── 2. ROC curve ────────────────────────────────────────────────────────
+    if len(np.unique(y_int)) > 1:
+        fpr, tpr, _ = roc_curve(y_int, y_prob)
+        auc_val = roc_auc_score(y_int, y_prob)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.plot(fpr, tpr, linewidth=2, label=f"AUC = {auc_val:.3f}")
+        ax.plot([0, 1], [0, 1], "--", color="grey", linewidth=0.8)
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.set_title("ROC Curve (Validation)")
+        ax.legend(loc="lower right")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1.02)
+        fig.tight_layout()
+        fig.savefig(plots_dir / "roc_curve.png", dpi=150)
+        plt.close(fig)
+
+    # ── 3. Precision-Recall curve ───────────────────────────────────────────
+    if len(np.unique(y_int)) > 1:
+        prec, rec, _ = precision_recall_curve(y_int, y_prob)
+        ap = average_precision_score(y_int, y_prob)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.plot(rec, prec, linewidth=2, label=f"AP = {ap:.3f}")
+        ax.set_xlabel("Recall")
+        ax.set_ylabel("Precision")
+        ax.set_title("Precision-Recall Curve (Validation)")
+        ax.legend(loc="upper right")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1.02)
+        fig.tight_layout()
+        fig.savefig(plots_dir / "precision_recall_curve.png", dpi=150)
+        plt.close(fig)
+
+    # ── 4. Recall@K curve ───────────────────────────────────────────────────
+    k_values = sorted(int(k.split("@")[1]) for k in recall_metrics)
+    recalls  = [recall_metrics[f"mean_recall@{k}"] for k in k_values]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(k_values, recalls, "o-", linewidth=2, markersize=8, color="#3498db")
+    for k, r in zip(k_values, recalls):
+        ax.annotate(f"{r:.2f}", (k, r), textcoords="offset points",
+                    xytext=(0, 10), ha="center", fontsize=10)
+    ax.set_xlabel("K (number of chunks selected)")
+    ax.set_ylabel("Mean Recall@K")
+    ax.set_title("Retrieval Performance: Recall@K (Validation)")
+    ax.set_xticks(k_values)
+    ax.set_ylim(0, 1.05)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(plots_dir / "recall_at_k.png", dpi=150)
+    plt.close(fig)
+
+    # ── 5. Score distribution ───────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.hist(y_prob[y_int == 0], bins=40, alpha=0.6, label="Negative", color="#e74c3c", density=True)
+    ax.hist(y_prob[y_int == 1], bins=40, alpha=0.6, label="Positive", color="#2ecc71", density=True)
+    ax.set_xlabel("Predicted Probability")
+    ax.set_ylabel("Density")
+    ax.set_title("Score Distribution (Validation)")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(plots_dir / "score_distribution.png", dpi=150)
+    plt.close(fig)
+
+    print(f"Plots saved to {plots_dir}/")
+
+
 # ── Full training pipeline ────────────────────────────────────────────────────
 
 def run_training(
@@ -348,6 +463,14 @@ def run_training(
     }
     with open(output_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
+
+    # 8. Save diagnostic plots
+    _save_plots(
+        model, X_val, y_val,
+        feat_names=feat_names,
+        recall_metrics=recall_metrics,
+        output_dir=output_dir,
+    )
 
     print(f"\nArtifacts saved to {output_dir}/")
     return metrics
