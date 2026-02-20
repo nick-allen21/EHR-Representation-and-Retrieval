@@ -1,0 +1,21 @@
+Our goal is to improve how machine learning systems select context from Electronic Health Records (EHRs) for downstream clinical question answering and decision support. In many deployed or prototype settings, a language model is given a limited context window and must answer patient-specific questions by reading a subset of the patient record. Current approaches to selecting that subset are often heuristic (e.g., recency-only, semantic similarity retrieval, or pre-chosen note types), which can surface redundant or irrelevant information and ignore temporal structure that clinicians rely on when reasoning about patient trajectories.
+
+\paragraph{Key idea: add a learned selection layer to empower smaller LLMs.}
+We focus on the upstream problem of \emph{learned context selection under a strict budget}. Rather than improving the downstream language model itself, we learn a lightweight, interpretable ``middle layer'' that maps a patient's record to a minimal set of evidence chunks that are maximally useful for answering a question. This layer is intended to make \emph{smaller} LLMs (e.g., LLaMA-scale models) more capable by ensuring they see the right evidence within their limited context window.
+
+
+\paragraph{Data setting.}
+We construct supervision by having a larger language model generate grounded QA pairs over MIMIC-derived patient contexts (notes and structured events). These model-generated QA pairs provide scalable weak supervision for which parts of the record are useful. However, even a strong model can introduce biases or subtle factual errors; therefore, we will also explore incorporating clinician-reviewed or clinician-authored QA datasets for stronger evaluation (and potentially training) as we obtain sufficient coverage.
+
+\paragraph{Evaluation principle: small model baseline vs small model + learned retrieval.}
+Our primary comparison is:
+\begin{itemize}
+    \item \textbf{Baseline:} a small LLM answers questions using a standard retrieval heuristic (or naive context selection).
+    \item \textbf{Ours:} the same small LLM answers questions using context selected by our learned retrieval layer (logistic regression chunk scorer).
+\end{itemize}
+We evaluate on clinician-reviewed QA benchmarks to measure real improvements rather than imitation of the teacher model. In particular, we plan to use EHRNoteQA, a benchmark built from MIMIC-IV discharge summaries where QA pairs are initially generated with GPT-4 and then manually reviewed and refined by clinicians \citep{ehrnoteqa_physionet_101},
+\citep{johnson_mimiciv}.
+ 
+
+\paragraph{Problem formulation.}
+Given a question $q$ and an EHR context $X$ (a long sequence of time-stamped events and clinical notes), we aim to select a subset of chunks $S \subset X$ under a budget constraint (e.g., $|S|\le K$ or a token budget). The selected context is then fed to a frozen downstream LLM. This milestone focuses on implementing the learned selector and the end-to-end evaluation scaffold.

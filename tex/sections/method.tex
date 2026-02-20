@@ -1,0 +1,36 @@
+\paragraph{Overview.}
+We construct a two-stage pipeline: (i) preprocess MIMIC-derived patient admissions into a temporally ordered ``timeline'' representation and (ii) learn a supervised chunk scoring function that ranks candidate chunks for inclusion under a context budget. A downstream small LLM consumes the selected chunks to produce an answer; we keep this LLM frozen to isolate the effect of context selection.
+
+\paragraph{Timeline representation (data layer).}
+For each admission we assemble:
+\begin{itemize}
+    \item \textbf{Free-text notes} (e.g., discharge summary),
+    \item \textbf{Structured events} (e.g., labs, vitals, medications, procedures, diagnoses),
+    \item \textbf{Timestamps} and admission-level metadata.
+\end{itemize}
+Events are normalized and sorted by time. This unified representation defines the set of candidate ``evidence chunks'' that can be selected.
+
+\paragraph{Chunking.}
+We segment long note text into chunks using a token-length target (e.g., 250--500 tokens) optionally with overlap. Structured events are converted into short standardized textual ``event snippets'' (e.g., \texttt{[lab] K=4.2 mmol/L at 2104-05-12 09:10}) and treated as additional chunks with explicit timestamps. Each chunk also has a relative position feature (index/normalized position).
+
+\paragraph{Supervision via teacher-generated QA (training).}
+For training, we generate QA pairs using a larger language model by providing a serialized patient timeline and prompting for clinically meaningful questions and grounded answers. These QA pairs provide scalable weak supervision for which parts of the record are useful. We derive training labels at the \emph{(question, chunk)} level by marking a chunk as positive if it contains or strongly supports the target answer (via exact match and/or entity/keyword overlap heuristics). Negatives are sampled from other chunks, including ``hard negatives'' with high lexical/semantic similarity but lacking answer support.
+
+\paragraph{Learned scoring model (logistic regression baseline).}
+We train a logistic regression model to predict whether a chunk is useful for answering a given question:
+\[
+p(y=1 \mid q, c) = \sigma(w^\top \phi(q,c)),
+\]
+where $\phi(q,c)$ is a feature vector for (question $q$, chunk $c$). This model produces a relevance score used to rank chunks and select the top-$K$ under a budget.
+
+\paragraph{Features.}
+We use a compact feature set that is efficient to compute:
+\begin{itemize}
+    \item \textbf{Lexical similarity:} TF--IDF cosine similarity; token overlap statistics.
+    \item \textbf{Semantic similarity:} cosine similarity between frozen embeddings of question and chunk.
+    \item \textbf{Temporal/structural signals:} chunk position within the note; event recency and time deltas for structured events.
+    \item \textbf{Optional note structure:} section/header features when reliably parseable (e.g., \texttt{DISCHARGE MEDICATIONS}).
+\end{itemize}
+
+\paragraph{Inference and comparison.}
+At inference time, for each question we score all candidate chunks, rank them, and select the top-$K$ chunks (or fill a token budget). We compare a frozen small LLM answering with (i) baseline retrieval and (ii) our learned retrieval layer.
