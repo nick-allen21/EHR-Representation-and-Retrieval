@@ -1,0 +1,42 @@
+\label{sec:nextsteps}
+\paragraph{1. Scale up data reliably and improve supervision quality.}
+Our current preliminary results use a limited sample and a simple feature set that is intentionally close to standard retrieval (TF--IDF / embedding similarity). The next priority is to increase coverage and reduce label noise in the training supervision:
+\begin{itemize}
+    \item \textbf{Expand cohorts and admissions:} scale preprocessing beyond the initial subset to a larger, diverse set of admissions and note types while maintaining patient-level splits.
+    \item \textbf{Upgrade teacher QA generation:} iterate on prompts to generate questions that require grounded evidence (and temporal reasoning) rather than generic paraphrases. Enforce structured outputs (e.g., answer type, required source types).
+    \item \textbf{Evidence-aware supervision:} modify QA generation to also output \emph{evidence pointers} (e.g., quote-supported snippets or event references) so that positive chunk labels are less reliant on brittle string matching.
+    \item \textbf{Clinician-reviewed benchmarks:} incorporate EHRNoteQA as the primary evaluation dataset and treat teacher-generated QA primarily as scalable training supervision. We will also explore whether additional clinician-reviewed QA resources can be aggregated for broader evaluation.
+\end{itemize}
+
+\paragraph{2. Add higher-signal temporal and structured-event features.}
+To move beyond ``vanilla RAG,'' we will add features that explicitly encode longitudinal structure:
+\begin{itemize}
+    \item \textbf{Time-gap features:} for structured events, include $\Delta t$ to discharge and coarse buckets (e.g., within 24h, 2--7d, $>$7d). For note chunks, use position as a proxy and also detect temporal markers (``today,'' ``overnight,'' ``post-op day'').
+    \item \textbf{Recency and trend features for labs/vitals:} include whether a chunk/event contains abnormal values, changes from baseline, and simple slopes (e.g., last value vs prior value) for frequently queried labs.
+    \item \textbf{Event salience indicators:} binary flags for critical events (ICU transfer, intubation, surgery keywords), medication initiation/cessation, and new diagnoses.
+    \item \textbf{Aggregation features:} summarize structured events into compact representations (e.g., top abnormal labs; most recent medication list; key procedures) that can compete with or complement free-text chunks under tight budgets.
+\end{itemize}
+
+\paragraph{3. Add note-structure features (section-aware retrieval).}
+Discharge summaries typically contain semi-structured headers (e.g., \texttt{HPI}, \texttt{HOSPITAL COURSE}, \texttt{DISCHARGE MEDICATIONS}). We will implement robust header detection and include:
+\begin{itemize}
+    \item \textbf{Section bucket features:} coarse section labels per chunk (medications, diagnoses, course, follow-up, labs, imaging, etc.).
+    \item \textbf{Question-type $\times$ section interactions:} simple rules to detect question intent (meds/dx/labs/imaging/follow-up) and interaction features that allow a linear model to prefer the right sections for each question type.
+\end{itemize}
+
+\paragraph{4. Learn better scoring functions beyond the current linear baseline.}
+Logistic regression provides a strong, interpretable baseline, but it may not capture non-linear interactions between signals. We will explore:
+\begin{itemize}
+    \item \textbf{MLP ranker on frozen embeddings:} a lightweight neural model over $(q, c)$ embeddings and engineered temporal/section features.
+    \item \textbf{Two-stage retrieval:} fast retriever (TF--IDF/bi-encoder) $\rightarrow$ re-ranker (MLP or cross-encoder) on the top-$M$ candidates, to keep computation feasible.
+    \item \textbf{Structured sparsity / coherence constraints:} post-processing to encourage selecting contiguous windows in notes or coherent ``time windows'' in event sequences, rather than temporaly disparate chunks that may provide contradictory information
+\end{itemize}
+
+\paragraph{5. Strengthen evaluation and analysis.}
+We will expand evaluation beyond a single metric and include:
+\begin{itemize}
+    \item \textbf{Budget-efficiency curves:} performance vs context size (top-$K$ and token budgets).
+    \item \textbf{Evidence support metrics:} whether the selected context contains answer spans/entities and whether the downstream model's answer is supported by selected evidence.
+    \item \textbf{Ablations:} remove temporal features, remove structured events, remove section features, and compare learned selection vs standard RAG heuristics.
+    \item \textbf{Error analysis:} characterize failure modes (list omissions, temporal confusion, distractor overlap) and identify which feature additions address them.
+\end{itemize}

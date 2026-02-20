@@ -1,0 +1,17 @@
+\paragraph{Status.}
+NO EXPERIMENTS RAN YET: NEED TO DO!!
+
+\paragraph{Planned baseline experiments (FILL IN BELOW).}
+We will report quantitative results in the final report. The initial experiment set will include:
+\begin{itemize}
+    \item \textbf{Retrieval baselines:} TF--IDF retrieval over chunks; embedding similarity retrieval; simple recency/position heuristic; random selection (sanity check).
+    \item \textbf{Learned selector:} logistic regression chunk scorer trained with negative sampling.
+    \item \textbf{Downstream evaluation:} a frozen small LLM answering questions using (a) baseline retrieval and (b) our learned retrieval layer.
+    \item \textbf{Budgets:} evaluate performance as a function of context size (top-$K$ chunks / token budgets).
+\end{itemize}
+
+\paragraph{Evaluation datasets.}
+Training supervision is initially derived from teacher-generated QA pairs over MIMIC-derived contexts. For benchmark evaluation, we plan to use clinician-reviewed QA datasets (e.g., EHRNoteQA \cite{ehrnoteqa_physionet_101}). 
+
+\paragraph{Error analysis plan.}
+We will perform qualitative analysis on failure modes, including: (i) list-style omissions (e.g., partial medication lists), (ii) temporal confusions (wrong time point), (iii) distractor chunks with high lexical overlap, and (iv) cases where generated QA supervision is weakly grounded in the record.
