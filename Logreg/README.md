@@ -2,9 +2,73 @@
 
 ## What this is
 
-A supervised **L1-regularized logistic regression** model that learns to score and select chunks of a discharge summary note based on their usefulness for answering a clinical question.
+A supervised **L1-regularized logistic regression** model that learns to score and select chunks of a patient record based on their usefulness for answering a clinical question.
 
-**This model does not answer questions.** It only decides *which parts of the note* to include in the context passed to a downstream LLM.
+**This model does not answer questions.** It is a learned **context selection layer** — it decides *which parts of the record* to include in the context passed to a frozen downstream LLM. The goal is to make smaller LLMs (e.g., LLaMA-scale models) more capable by ensuring they see the right evidence within their limited context window.
+
+> *"Rather than improving the downstream language model itself, we learn a lightweight, interpretable 'middle layer' that maps a patient's record to a minimal set of evidence chunks that are maximally useful for answering a question."*
+> — Milestone report
+
+---
+
+## Progress
+
+### Done
+
+- [x] **Preprocess pipeline** — BigQuery extraction of discharge summaries, structured events (labs, vitals, meds, procedures, diagnoses), demographics, and admission metadata into longitudinal patient timelines (`Preprocess/`)
+- [x] **QA generation pipeline** — Async gpt-4o generation of grounded QA pairs with per-patient caching and resumability (`Generation/`)
+- [x] **Chunking** — Section-based splitting on MIMIC-IV headers with automatic fallback to fixed-size overlapping token windows; oversized sections sub-split (`chunker.py`)
+- [x] **Weak labeling** — Token F1 overlap between chunk text and gold answer; threshold at F1 ≥ 0.15 (`labeler.py`)
+- [x] **Feature extraction** — 130-dim feature vector: lexical similarity (TF-IDF cosine, token overlap), semantic similarity (sentence-transformer embeddings), structural signals (position, log length), section one-hot (17), question-type one-hot (6), section × question-type interactions (102) (`features.py`)
+- [x] **L1 logistic regression training** — Patient-level train/val split, negative sampling, class-weight balancing, bulk embedding computation (`train.py`)
+- [x] **Inference selector** — Load trained model, score chunks, return top-K (`selector.py`)
+- [x] **CLI** — `train`, `evaluate`, `select` subcommands (`run.py`)
+- [x] **Evaluation metrics** — Classification diagnostics (ROC-AUC, average precision) + per-question Recall@K as primary retrieval metric
+- [x] **Preliminary results on validation set** — Recall@1 = 0.45, Recall@3 = 0.71, Recall@5 = 0.84, Recall@10 = 0.96
+- [x] **Diagnostic plots** — Feature importance, ROC curve, precision-recall curve, Recall@K curve, score distribution
+
+### TODO
+
+- [ ] **Add higher-signal temporal and structured-event features**
+  - [ ] Time-gap features: Δt to discharge, coarse temporal buckets (within 24h, 2–7d, >7d), temporal marker detection ("today," "overnight," "post-op day")
+  - [ ] Recency and trend features for labs/vitals: abnormal value flags, changes from baseline, simple slopes for frequently queried labs
+  - [ ] Event salience indicators: binary flags for critical events (ICU transfer, intubation, surgery keywords), medication initiation/cessation, new diagnoses
+  - [ ] Aggregation features: compact representations of structured events (top abnormal labs, most recent medication list, key procedures)
+- [ ] **Ablate weak supervision threshold** — Sweep F1 threshold (0.10, 0.15, 0.20, 0.30) to study tradeoff between missing weakly relevant evidence (too strict) and introducing noisy positives (too lax)
+- [ ] **Scale data reliably and implement evaluation dataset**
+  - [ ] Expand cohorts beyond initial subset to larger, diverse set of admissions
+  - [ ] Set up held-out test set (currently only train/val; test needed for final evaluation)
+  - [ ] Incorporate clinician-reviewed benchmark (EHRNoteQA) as primary evaluation dataset
+- [ ] **Set up downstream "small" LLM to generate answers** — Wire selected chunks into a frozen small LLM (e.g., o4-mini), compare: (a) baseline retrieval heuristic vs (b) learned retrieval layer, isolating gains from context selection
+- [ ] **Learn better scoring functions beyond linear baseline**
+  - [ ] MLP ranker on frozen embeddings + engineered temporal/section features
+  - [ ] Two-stage retrieval: fast retriever (TF-IDF/bi-encoder) → re-ranker (MLP or cross-encoder)
+  - [ ] Structured sparsity / coherence constraints for contiguous note windows or coherent time windows
+- [ ] **Strengthen evaluation and analysis**
+  - [ ] Budget-efficiency curves: performance vs context size (top-K and token budgets)
+  - [ ] Evidence support metrics: whether selected context contains answer spans/entities
+  - [ ] Ablations: remove temporal features, remove structured events, remove section features, compare learned vs RAG heuristics
+  - [ ] Error analysis: characterize failure modes (list omissions, temporal confusion, distractor overlap)
+- [ ] **Final write-up**
+- [ ] **Clean up code and turn in**
+- [ ] **Project poster**
+
+---
+
+## Preliminary Results
+
+On the validation set (patient-level split, no leakage), the learned selector achieves strong retrieval performance under small budgets:
+
+| K | mean Recall@K |
+|---|---|
+| 1 | 0.45 |
+| 3 | 0.71 |
+| 5 | 0.84 |
+| 10 | 0.96 |
+
+Recall improves sharply from K=1 to K=5, indicating that high-scoring chunks are preferentially relevant rather than the model simply classifying most chunks as negative.
+
+**Limitations of current results:** These evaluate retrieval quality using overlap-derived "positives" as ground truth and report validation performance only. The final evaluation will (i) use clinician-reviewed QA benchmarks (EHRNoteQA) and (ii) compare a downstream small LLM baseline to the same model augmented with learned retrieval, isolating gains attributable to improved context selection.
 
 ---
 
@@ -12,20 +76,20 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 
 ### Input
 - A **clinical question** (e.g., "What medications was the patient discharged on?")
-- A **discharge summary** (full note text from MIMIC-IV-Note, fetched via BigQuery and stored in `patient_timelines.json`)
+- A **patient record** (discharge summary + serialized structured events, from `patient_timelines.json`)
 
 ### Output
-- A **ranked list of chunks** from that discharge summary, scored by predicted usefulness
-- At inference: the **top-K chunks** are selected and passed to an LLM
+- A **ranked list of chunks** from that record, scored by predicted usefulness
+- At inference: the **top-K chunks** are selected and passed to a frozen downstream LLM
 
 ### What is learned
-A single global function:
+A single global scoring function:
 
 ```
-score(question, chunk) → probability of usefulness ∈ [0, 1]
+p(y=1 | q, c) = σ(w⊤ φ(q, c))
 ```
 
-The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
+where φ(q, c) is a 130-dimensional feature vector for (question q, chunk c). The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
 
 ---
 
@@ -47,8 +111,6 @@ Written by `python -m Preprocess.run_pipeline`. Each record contains:
 - `events` — chronologically sorted structured clinical events (labs, vitals, medications, procedures)
 - `demographics`, `admission` — structured metadata
 
-The discharge summary is the only field used by Logreg. The Preprocess module handles all BigQuery access; Logreg reads only the JSON file.
-
 **To generate:**
 ```bash
 python -m Preprocess.run_pipeline --limit 500 --format json   # quick test
@@ -65,8 +127,6 @@ subject_id, hadm_id, qa_pairs: [{question, answer, difficulty, source_types, rea
 ```
 
 The `source_types` field lists which data sources are needed to answer (e.g., `["discharge_summary", "lab"]`). **Only pairs where `"discharge_summary"` is in `source_types` are kept** — because weak supervision (labeling chunks via token overlap with the answer) only works when the answer text actually appears in the discharge note.
-
-Cross-source-only questions (e.g., answers derived purely from structured lab events, not from the note) are silently dropped during `merge()`.
 
 #### Option B: EHR-DS-QA (shipped) — `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json`
 
@@ -106,11 +166,11 @@ python -m Logreg.run train --qa-data data/physionet.org/files/ehr-ds-qa/1.0.0/mi
 
 QA pairs provide `(question, answer)` but do **not** label individual chunks. Labels are derived automatically:
 
-1. Split the discharge summary into chunks (by section header or fixed-size windows)
+1. Split the patient record into chunks (by section header or fixed-size windows)
 2. For each chunk, compute **token F1** between the chunk text and the gold answer
-3. Label the chunk **positive (1)** if `token_F1 ≥ 0.2`, else **negative (0)**
+3. Label the chunk **positive (1)** if `token_F1 ≥ 0.15`, else **negative (0)**
 
-This is called **distant supervision** — standard in search and retrieval model training (e.g., how DPR and BM25 re-rankers are trained).
+This is **distant supervision** — standard in retrieval model training (e.g., DPR, BM25 re-rankers). The threshold of 0.15 will be ablated in future work (see TODO).
 
 **Why this works:** The answers are factual sentences drawn from the discharge note. A chunk with high token overlap with the answer almost certainly contains the supporting evidence.
 
@@ -128,9 +188,9 @@ Splits on MIMIC-IV discharge summary section headers using regex:
 - `History of Present Illness:` (Title Case + colon)
 - `PHYSICAL EXAMINATION` (ALL CAPS, 4+ chars)
 
-Each detected section becomes one chunk. Section text becomes the `section` field via a lookup table mapping headers to clinical categories.
+Each detected section becomes one chunk. Sections exceeding a token limit are automatically sub-split into overlapping fixed-size windows so that token-F1 weak supervision works well even for long sections (e.g., Hospital Course).
 
-**Fallback:** If fewer than 3 section headers are detected (malformed or very short note), falls back automatically to fixed-size token windows. Sections are a feature we experiment with — they are not make-or-break. All notes always get multiple retrievable chunks.
+**Fallback:** If fewer than 3 section headers are detected (malformed or very short note), falls back automatically to fixed-size token windows.
 
 ### `fixed`
 
@@ -138,14 +198,15 @@ Overlapping sliding windows of whitespace tokens.
 - Default: 200 tokens per window, 100-token stride (50% overlap)
 - All chunks get `section = "other"`
 
-### Section categories (17)
+### Section categories (19)
 
 Used for the one-hot encoding in the feature vector:
 
 ```
 medications, diagnosis, hospital_course, results, hpi, allergies,
 chief_complaint, pmh, exam, labs, followup, discharge_instructions,
-discharge_condition, discharge_disposition, social, family, other
+discharge_condition, discharge_disposition, social, family, vitals,
+procedure, other
 ```
 
 ---
@@ -153,17 +214,6 @@ discharge_condition, discharge_disposition, social, family, other
 ## Feature Vector (130 dimensions)
 
 Every `(question, chunk)` pair is converted into a 130-dimensional float32 vector. The L1 penalty drives most weights to zero; only the most informative features survive.
-
-### Why so many features, then kill them with L1?
-
-Yes — this is standard practice. The idea is:
-
-- You propose a large set of candidate signals covering many hypotheses about what makes a chunk relevant
-- L1 regularization automatically performs **feature selection**: it zeroes out features that don't help generalization
-- The result is a sparse, interpretable model where you can read the non-zero weights and understand what the model actually learned
-- This is strictly better than manually deciding which features to include — you let the data decide
-
-With real data, you typically expect 10–30 non-zero features out of 130. The interaction features (102 of the 130) are especially likely to be mostly zeroed — only the combinations that genuinely predict relevance survive (e.g., `int_medications_medications` will likely be strongly positive; `int_medications_imaging` will likely be zero).
 
 ### Scalar features (5)
 
@@ -175,20 +225,11 @@ With real data, you typically expect 10–30 non-zero features out of 130. The i
 | 3 | `position` | Normalized chunk position in note: 0.0 = beginning, 1.0 = end |
 | 4 | `log_length` | `log(1 + whitespace token count of chunk)` — proxy for chunk size |
 
-### Section one-hot (17, indices 5–21)
+### Section one-hot (19, indices 5–23)
 
-Which clinical section the chunk came from. One-hot over the 17 section categories listed above.
+Which clinical section the chunk came from. One-hot over the section categories listed above.
 
-```
-sec_medications, sec_diagnosis, sec_hospital_course, sec_results, sec_hpi,
-sec_allergies, sec_chief_complaint, sec_pmh, sec_exam, sec_labs, sec_followup,
-sec_discharge_instructions, sec_discharge_condition, sec_discharge_disposition,
-sec_social, sec_family, sec_other
-```
-
-Fixed-size chunks all get `sec_other = 1`.
-
-### Question-type one-hot (6, indices 22–27)
+### Question-type one-hot (6, indices 24–29)
 
 Classified from question text by keyword matching:
 
@@ -201,21 +242,16 @@ Classified from question text by keyword matching:
 | `procedure` | procedure, surgery, operation, performed, intervention |
 | `other` | (no keywords matched) |
 
-```
-qt_medications, qt_diagnosis, qt_labs, qt_imaging, qt_procedure, qt_other
-```
+### Section × Question-type interactions (indices 30+)
 
-### Section × Question-type interactions (102, indices 28–129)
-
-Every pairwise product of the section one-hot and question-type one-hot:
-`int_{section}_{question_type}` for all 17 × 6 = 102 combinations.
+Every pairwise product of the section one-hot and question-type one-hot.
 
 Examples of what these capture:
 - `int_medications_medications` — medications chunk + medications question → strong positive signal
 - `int_hospital_course_diagnosis` — hospital course chunk + diagnosis question → likely positive
 - `int_discharge_instructions_labs` — discharge instructions chunk + lab question → likely zero (irrelevant)
 
-The model learns these associations from data rather than hard-coding them.
+The model learns these associations from data rather than hard-coding them. L1 regularization zeroes out the vast majority of interactions — only the combinations that genuinely predict relevance survive.
 
 ---
 
@@ -250,11 +286,19 @@ mean_recall@K = average over all questions of:
                   / (# answer-containing chunks total)
 ```
 
-**Example:** A question has 2 positive chunks. Model puts both in top-3 → `recall@3 = 1.0`. Retrieves only 1 → `recall@3 = 0.5`.
-
-This directly measures the model's value to the downstream LLM. `recall@5 = 0.8` means the LLM receives 80% of the answer-supporting evidence within a 5-chunk context budget.
+This directly measures the model's value to the downstream LLM. `recall@5 = 0.84` means the LLM receives 84% of the answer-supporting evidence within a 5-chunk context budget.
 
 Reported under `val.mean_recall@{K}` in `metrics.json`. **This is the number to report.**
+
+---
+
+## Validation Protocol
+
+- **Patient-level split** — all examples from a given patient are assigned entirely to train or val (no patient spans both)
+- **TF-IDF fitted on train only** — vocabulary learned from train questions + train chunks, applied to val via `transform`
+- **Frozen sentence embeddings** — computed with a pretrained encoder, no fitting on val data
+- **Model trained on train only** — evaluated on held-out validation patients
+- **Separate test set** — will be introduced for final evaluation (not yet implemented, see TODO)
 
 ---
 
@@ -339,30 +383,13 @@ python -m Logreg.run select \
 Discharge summaries have a well-defined section structure (HPI, Hospital Course, Discharge Medications, etc.). Section chunks are clinically meaningful units. When section parsing fails, fixed-size token windows are used as a fallback — every note always produces multiple retrievable chunks.
 
 **Why L1 (not L2) regularization?**
-L1 drives most weights to exactly zero, giving a sparse model where only the most informative features remain. This makes the model interpretable — you can read the non-zero weights directly. It also implicitly does feature selection over the 102 interaction features, most of which are expected to be irrelevant.
+L1 drives most weights to exactly zero, giving a sparse model where only the most informative features remain. This makes the model interpretable — you can read the non-zero weights directly. It also implicitly does feature selection over the interaction features, most of which are expected to be irrelevant.
 
 **Why patient-level train/val split?**
 If the same patient appears in both train and val, the model can memorize note-specific language and overfit. Patient-level splitting ensures the val set contains genuinely unseen notes.
 
-**Why not split by question?**
-The same patient has multiple questions that all share the same note text. Patient is the correct granularity for EHR data.
-
 **Why bulk embeddings?**
-Sentence-transformer inference is slow when called per-example. `run_training` computes embeddings in a single batched pass per split (train then val), then reuses them during feature extraction. This avoids calling the encoder once per (question, chunk) pair.
+Sentence-transformer inference is slow when called per-example. `run_training` computes embeddings in a single batched pass per split (train then val), then reuses them during feature extraction.
 
----
-
-## What to Expect on Real Data
-
-On the full EHR-DS-QA dataset (~21k notes, ~156k QA pairs) with section chunking:
-
-- Average sections per note: ~10–15
-- Average positive sections per question: ~1–2
-- Baseline (random selection): `mean_recall@1 ≈ 0.08–0.12`
-- BM25 baseline: `mean_recall@5 ≈ 0.5–0.7` (estimate)
-- Learned model target: `mean_recall@5 ≥ 0.7` with L1 sparsity
-
-If `mean_recall@K` is barely above random, likely causes:
-1. Label threshold too high or too low — try `--label-threshold 0.15` or `0.3`
-2. TF-IDF not fitted on enough text — use more records
-3. Discharge note text missing for many records — check merge output counts
+**Why weak supervision via token F1?**
+The QA pairs provide (question, answer) but not per-chunk relevance labels. Token F1 overlap is a cheap, scalable proxy: a chunk with high token overlap with the gold answer almost certainly contains the supporting evidence. The threshold (currently 0.15) trades off between missing weakly relevant chunks (too strict) and introducing noisy positives (too lax).
