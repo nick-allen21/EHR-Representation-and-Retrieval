@@ -52,9 +52,10 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | Nick | Done |
 | — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
 | — Score with ROUGE-L, token F1 | Nick | Done |
-| — LLM-as-judge scoring | Nick | Interface built, deferred to prompt design |
-| **Multi-model generalization (Phase 2)** | Nick | |
-| — Set up HuggingFace inference (Llama-3-8B, Mistral-7B, Phi-3-mini) | | |
+| — LLM-as-judge scoring | Nick | In progress — designing prompt + running |
+| **Multi-model generalization (Phase 2)** | Nick | In progress |
+| — Extend `llm_runner.py` to support HuggingFace models | Nick | In progress |
+| — Set up HuggingFace inference (Llama-3-8B, Mistral-7B, Phi-3-mini) | Nick | In progress |
 | — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | o4-mini done, gpt-4o-mini pending |
 | — Run full model × retrieval matrix | Nick | |
 | **Learn better scoring functions** | | |
@@ -62,6 +63,7 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
+| — LLM-as-judge prompt design and execution | Nick | In progress |
 | — Evidence support metrics | | |
 | — Feature group ablations | | |
 | — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
