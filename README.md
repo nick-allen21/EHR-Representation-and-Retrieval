@@ -26,59 +26,70 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 - [x] **Evaluation metrics** — Classification diagnostics (ROC-AUC, average precision) + per-question Recall@K as primary retrieval metric
 - [x] **Preliminary results on validation set** — Recall@1 = 0.45, Recall@3 = 0.71, Recall@5 = 0.84, Recall@10 = 0.96
 - [x] **Diagnostic plots** — Feature importance, ROC curve, precision-recall curve, Recall@K curve, score distribution
+- [x] **Downstream LLM evaluation pipeline** *(Nick)* — 6 retrieval strategies (discharge-only, full-context, recency, BM25, semantic RAG, learned) evaluated on frozen o4-mini with token F1 and ROUGE-L scoring (`Evaluation/`)
+- [x] **Phase 1 core comparison results** *(Nick)* — 200-patient dev set, 1,000 QA pairs, 4,096-token budget; learned selector achieves 0.406 token F1 with 72% fewer tokens than full-context
+- [x] **Response caching infrastructure** *(Nick)* — SHA-256 disk cache in `data/results/cache/` for $0 re-runs; reasoning-model detection for o-series API quirks (`max_completion_tokens`, no `temperature`)
+- [x] **Git LFS data sharing** *(Nick)* — `patient_timelines.json` and `qa_pairs.json` tracked via LFS so collaborators don't need to regenerate
+- [x] **Per-difficulty breakdown** *(Nick)* — Metrics split by question difficulty (easy/medium/hard) implemented in `analysis.py`
 
 ### TODO
 
-- [ ] **Add higher-signal temporal and structured-event features**
-  - [ ] Time-gap features: Δt to discharge, coarse temporal buckets (within 24h, 2–7d, >7d), temporal marker detection ("today," "overnight," "post-op day")
-  - [ ] Recency and trend features for labs/vitals: abnormal value flags, changes from baseline, simple slopes for frequently queried labs
-  - [ ] Event salience indicators: binary flags for critical events (ICU transfer, intubation, surgery keywords), medication initiation/cessation, new diagnoses
-  - [ ] Aggregation features: compact representations of structured events (top abnormal labs, most recent medication list, key procedures)
-- [ ] **Ablate weak supervision threshold** — Sweep F1 threshold (0.10, 0.15, 0.20, 0.30) to study tradeoff between missing weakly relevant evidence (too strict) and introducing noisy positives (too lax)
-- [ ] **Scale data reliably and implement evaluation dataset**
-  - [ ] Expand cohorts beyond initial subset to larger, diverse set of admissions
-  - [ ] Set up held-out test set (currently only train/val; test needed for final evaluation)
-  - [ ] Incorporate clinician-reviewed benchmark (EHRNoteQA) as primary evaluation dataset
-- [x] **Set up downstream LLM evaluation (Phase 1: core comparison) --> Nick — completed 3.11.26**
-  - [x] Wire selected chunks into a frozen small LLM (o4-mini)
-  - [x] Implement all retrieval baselines: discharge-only, full-context, recency, BM25, semantic similarity RAG
-  - [x] Run learned selector vs all baselines on the same fixed LLM
-  - [x] Score with ROUGE-L, token F1 (LLM-as-judge interface built, deferred to prompt design phase)
-- [ ] **Multi-model generalization (Phase 2: model × retrieval matrix)**
-  - [ ] Run the same retrieval comparison across multiple frozen small LLMs to show the learned retrieval layer generalizes across architectures:
+| Task | Owner | Status |
+|---|---|---|
+| **Add higher-signal temporal and structured-event features** | | |
+| — Time-gap features, temporal buckets, temporal marker detection | | |
+| — Recency/trend features for labs/vitals, abnormal value flags | | |
+| — Event salience indicators (ICU transfer, intubation, new dx) | | |
+| — Aggregation features (top abnormal labs, recent med list) | | |
+| **Ablate weak supervision threshold** (sweep 0.10–0.30) | | |
+| **Scale data and implement evaluation dataset** | Nick | In progress |
+| — Expand to 200-patient dev set with gpt-4o QA pairs | Nick | Done |
+| — Scale to 5,000 patients for final results (~$1,300 est.) | Nick | |
+| — Set up held-out test set | | |
+| — Incorporate EHRNoteQA as primary eval benchmark | | |
+| **Downstream LLM evaluation (Phase 1: core comparison)** | Nick | Done (3/11/26) |
+| — Wire selected chunks into frozen small LLM (o4-mini) | Nick | Done |
+| — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | Nick | Done |
+| — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
+| — Score with ROUGE-L, token F1 | Nick | Done |
+| — LLM-as-judge scoring | Nick | Interface built, deferred to prompt design |
+| **Multi-model generalization (Phase 2)** | Nick | |
+| — Set up HuggingFace inference (Llama-3-8B, Mistral-7B, Phi-3-mini) | | |
+| — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | o4-mini done, gpt-4o-mini pending |
+| — Run full model × retrieval matrix | Nick | |
+| **Learn better scoring functions** | | |
+| — MLP ranker on frozen embeddings | | |
+| — Two-stage retrieval (fast retriever → re-ranker) | | |
+| **Strengthen evaluation and analysis** | Nick | In progress |
+| — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
+| — Evidence support metrics | | |
+| — Feature group ablations | | |
+| — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
+| **Final write-up** | | |
+| **Clean up code and turn in** | | |
+| **Project poster** | | |
 
-  |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
-  |---|---|---|---|---|---|---|
-  | o4-mini | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
-  | gpt-4o-mini | | | | | | |
-  | Llama-3-8B (HF) | | | | | | |
-  | Mistral-7B (HF) | | | | | | |
-  | Phi-3-mini (HF) | | | | | | |
+**Model × retrieval matrix** (to be filled during Phase 2):
 
-  - [ ] Set up HuggingFace inference for open-source models (Llama-3-8B, Mistral-7B, Phi-3-mini or similar)
-  - [ ] Set up OpenAI API inference for GPT small models (o4-mini, gpt-4o-mini)
-  - [ ] Run full matrix and report per-model improvement from learned retrieval vs best heuristic baseline
-- [ ] **Learn better scoring functions beyond linear baseline**
-  - [ ] MLP ranker on frozen embeddings + engineered temporal/section features
-  - [ ] Two-stage retrieval: fast retriever (TF-IDF/bi-encoder) → re-ranker (MLP or cross-encoder)
-  - [ ] Structured sparsity / coherence constraints for contiguous note windows or coherent time windows
-- [ ] **Strengthen evaluation and analysis**
-  - [ ] Budget-efficiency curves: performance vs context size (top-K and token budgets)
-  - [ ] Evidence support metrics: whether selected context contains answer spans/entities
-  - [ ] Ablations: remove temporal features, remove structured events, remove section features, compare learned vs RAG heuristics
-  - [ ] Error analysis: characterize failure modes (list omissions, temporal confusion, distractor overlap)
-- [ ] **Final write-up**
-- [ ] **Clean up code and turn in**
-- [ ] **Project poster**
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
+|---|---|---|---|---|---|---|
+| o4-mini | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
+| gpt-4o-mini | | | | | | |
+| Llama-3-8B (HF) | | | | | | |
+| Mistral-7B (HF) | | | | | | |
+| Phi-3-mini (HF) | | | | | | |
 
 ### Extensions (optional, if time permits)
 
-- [ ] **Budget-efficiency curves** — Plot QA accuracy as a function of context size (top-K = 1, 3, 5, 10, 25 and token budgets) across all retrieval methods; show the learned selector achieves higher accuracy with fewer tokens
-- [ ] **Per-difficulty and per-question-type breakdown** — Report metrics split by question difficulty (easy/medium/hard) and question type (medications/diagnosis/labs/imaging/procedure) to identify where the learned selector helps most
-- [ ] **Additional open-source models** — Extend the model × retrieval matrix to more HuggingFace models (e.g., Gemma-2-9B, Qwen-2.5-7B) for a broader generalization claim
-- [ ] **Cross-encoder re-ranker** — Train a lightweight cross-encoder on (question, chunk) pairs as a second-stage re-ranker on top of the logistic regression's top-M candidates
-- [ ] **Qualitative case studies** — Select 5–10 representative questions and show side-by-side: what each retrieval method selected, what the LLM answered, and where errors occurred
-- [ ] **Clinician evaluation** — Have a domain expert review a sample of LLM answers to assess clinical correctness beyond automated metrics
+| Task | Owner | Status |
+|---|---|---|
+| **Budget-efficiency curves** — accuracy vs context size across all methods | Nick | Infrastructure built |
+| **Per-difficulty breakdown** — metrics by easy/medium/hard | Nick | Done |
+| **Per-question-type breakdown** — metrics by medications/diagnosis/labs/etc. | | |
+| **Additional open-source models** — Gemma-2-9B, Qwen-2.5-7B, etc. | | |
+| **Cross-encoder re-ranker** — second-stage re-ranker on top of logreg top-M | | |
+| **Qualitative case studies** — side-by-side comparison of retrieval + LLM answers | | |
+| **Clinician evaluation** — domain expert review of answer correctness | | |
 
 ---
 
@@ -347,23 +358,36 @@ Reported under `val.mean_recall@{K}` in `metrics.json`. **This is the number to 
 ## File Structure
 
 ```
-Logreg/
-├── __init__.py
-├── data_loader.py       loads patient_timelines.json + QA pairs JSON, joins on (subject_id, hadm_id)
-├── chunker.py           splits discharge notes into chunks (section-based or fixed-size)
-├── labeler.py           assigns weak binary labels via token F1 overlap with the answer
-├── features.py          extracts the 130-dim feature vector for each (question, chunk) pair
-├── train.py             builds dataset, trains L1 logistic regression, saves artifacts
-├── selector.py          loads trained model, scores chunks, returns top-K
-└── run.py               CLI: train / evaluate / select subcommands
+Preprocess/                  Phase 0 — BigQuery → patient timelines
+├── bigquery_client.py       shared BQ client + query helper
+├── extract_notes.py         fetch discharge summaries
+├── extract_structured.py    fetch labs, vitals, diagnoses, meds, procedures
+├── build_timeline.py        merge all sources into longitudinal records
+└── run_pipeline.py          CLI entrypoint
 
-Evaluation/
-├── PLAN.md              experimental design and evaluation workflow
-├── context_builders.py  6 retrieval strategies → prompt strings (discharge, full, recency, BM25, RAG, learned)
-├── llm_runner.py        async OpenAI wrapper with disk-based response cache
-├── scoring.py           ROUGE-L, token F1, LLM-as-judge (stub)
-├── run_evaluation.py    CLI orchestrator: run strategies, score, save results
-└── analysis.py          aggregate results, comparison tables, plots
+Generation/                  Phase 0 — gpt-4o QA pair generation
+├── generate_qa.py           async generation with caching + retry
+└── prompts/qa_generation.txt
+
+Logreg/                      Phase 1a — learned chunk selector
+├── data_loader.py           loads + joins timelines and QA pairs
+├── chunker.py               section-based and fixed-size chunking
+├── labeler.py               weak binary labels via token F1 overlap
+├── features.py              130-dim feature extraction
+├── train.py                 L1 logistic regression training
+├── selector.py              inference: score chunks, return top-K
+└── run.py                   CLI: train / evaluate / select
+
+Evaluation/                  Phase 1b — downstream LLM comparison (Nick)
+├── PLAN.md                  experimental design
+├── context_builders.py      6 retrieval strategies → prompts
+├── llm_runner.py            async OpenAI wrapper + response cache
+├── scoring.py               token F1, ROUGE-L, LLM-as-judge (stub)
+├── run_evaluation.py        CLI orchestrator
+└── analysis.py              summary tables, plots, JSON export
+
+Progress/                    documentation for agent handoff
+└── CORE_COMPARISON_AGENT.md Phase 1b progress log (Nick)
 ```
 
 ---
