@@ -2,17 +2,20 @@
 
 This document defines how AI coding agents should operate within this repository. All agents must follow these procedures.
 
+**Core principle: Branches, README TODOs, Progress `.md` files, and Agents are always 1:1:1:1.** One branch per TODO. One Progress file per TODO. One agent per TODO. No exceptions.
+
 ---
 
-## 1. Branch, TODO, and Progress File Mapping (1:1:1)
+## 1. Branch, TODO, and Progress File Mapping (1:1:1:1)
 
-Every unit of work follows a strict **1:1:1 mapping**:
+Every unit of work follows a strict **1:1:1:1 mapping**:
 
 | Concept | Location | Example |
 |---|---|---|
 | **TODO item** | `README.md` → TODO table | "Multi-model generalization (Phase 2)" |
 | **Branch** | Git branch | `nallen21/multi-model-gen` |
 | **Progress file** | `Progress/<NAME>.md` | `Progress/MULTI_MODEL_GEN.md` |
+| **Agent** | One agent session owns the work | The agent that creates the branch |
 
 **Rules:**
 - Before starting work on a TODO, create a dedicated branch and a corresponding Progress file
