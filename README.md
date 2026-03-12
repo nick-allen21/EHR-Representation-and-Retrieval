@@ -29,56 +29,58 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 
 ### TODO
 
-- [ ] **Add higher-signal temporal and structured-event features**
-  - [ ] Time-gap features: Δt to discharge, coarse temporal buckets (within 24h, 2–7d, >7d), temporal marker detection ("today," "overnight," "post-op day")
-  - [ ] Recency and trend features for labs/vitals: abnormal value flags, changes from baseline, simple slopes for frequently queried labs
-  - [ ] Event salience indicators: binary flags for critical events (ICU transfer, intubation, surgery keywords), medication initiation/cessation, new diagnoses
-  - [ ] Aggregation features: compact representations of structured events (top abnormal labs, most recent medication list, key procedures)
-- [ ] **Ablate weak supervision threshold** — Sweep F1 threshold (0.10, 0.15, 0.20, 0.30) to study tradeoff between missing weakly relevant evidence (too strict) and introducing noisy positives (too lax)
-- [ ] **Scale data reliably and implement evaluation dataset**
-  - [ ] Expand cohorts beyond initial subset to larger, diverse set of admissions
-  - [ ] Set up held-out test set (currently only train/val; test needed for final evaluation)
-  - [ ] Incorporate clinician-reviewed benchmark (EHRNoteQA) as primary evaluation dataset
-- [ ] **Set up downstream LLM evaluation (Phase 1: core comparison) --> Nick Owning & Starting - 3.11.26; 5pm**
-  - [ ] Wire selected chunks into a frozen small LLM (e.g., o4-mini)
-  - [ ] Implement all retrieval baselines: discharge-only, full-context, recency, BM25, semantic similarity RAG
-  - [ ] Run learned selector vs all baselines on the same fixed LLM
-  - [ ] Score with ROUGE-L, token F1 / exact match, and LLM-as-judge (1–5 scale)
-- [ ] **Multi-model generalization (Phase 2: model × retrieval matrix)**
-  - [ ] Run the same retrieval comparison across multiple frozen small LLMs to show the learned retrieval layer generalizes across architectures:
+| Task | Owner | Status |
+|---|---|---|
+| **Add higher-signal temporal and structured-event features** | ( ) | |
+| — Time-gap features, temporal buckets, temporal marker detection | ( ) | |
+| — Recency/trend features for labs/vitals, abnormal value flags | ( ) | |
+| — Event salience indicators (ICU transfer, intubation, new dx) | ( ) | |
+| — Aggregation features (top abnormal labs, recent med list) | ( ) | |
+| **Ablate weak supervision threshold** (sweep 0.10–0.30) | ( ) | |
+| **Scale data and implement evaluation dataset** | ( ) | |
+| — Expand cohorts beyond initial subset | ( ) | |
+| — Set up held-out test set | ( ) | |
+| — Incorporate EHRNoteQA as primary eval benchmark | ( ) | |
+| **Downstream LLM evaluation (Phase 1: core comparison)** | (Nick) | |
+| — Wire selected chunks into frozen small LLM (o4-mini) | ( ) | |
+| — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | ( ) | |
+| — Run learned selector vs all baselines on same fixed LLM | ( ) | |
+| — Score with ROUGE-L, token F1, LLM-as-judge | ( ) | |
+| **Multi-model generalization (Phase 2)** | ( ) | |
+| — Set up HuggingFace inference (Llama-3-8B, Mistral-7B, Phi-3-mini) | ( ) | |
+| — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | ( ) | |
+| — Run full model × retrieval matrix | ( ) | |
+| **Learn better scoring functions** | ( ) | |
+| — MLP ranker on frozen embeddings | ( ) | |
+| — Two-stage retrieval (fast retriever → re-ranker) | ( ) | |
+| **Strengthen evaluation and analysis** | ( ) | |
+| — Budget-efficiency curves (accuracy vs K) | ( ) | |
+| — Feature group ablations | ( ) | |
+| — Error analysis (list omissions, temporal confusion, distractor overlap) | ( ) | |
+| **Final write-up** | ( ) | |
+| **Clean up code and turn in** | ( ) | |
+| **Project poster** | ( ) | |
 
-  |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
-  |---|---|---|---|---|---|---|
-  | o4-mini | | | | | | |
-  | gpt-4o-mini | | | | | | |
-  | Llama-3-8B (HF) | | | | | | |
-  | Mistral-7B (HF) | | | | | | |
-  | Phi-3-mini (HF) | | | | | | |
+**Model × retrieval matrix** (to be filled during Phase 2):
 
-  - [ ] Set up HuggingFace inference for open-source models (Llama-3-8B, Mistral-7B, Phi-3-mini or similar)
-  - [ ] Set up OpenAI API inference for GPT small models (o4-mini, gpt-4o-mini)
-  - [ ] Run full matrix and report per-model improvement from learned retrieval vs best heuristic baseline
-- [ ] **Learn better scoring functions beyond linear baseline**
-  - [ ] MLP ranker on frozen embeddings + engineered temporal/section features
-  - [ ] Two-stage retrieval: fast retriever (TF-IDF/bi-encoder) → re-ranker (MLP or cross-encoder)
-  - [ ] Structured sparsity / coherence constraints for contiguous note windows or coherent time windows
-- [ ] **Strengthen evaluation and analysis**
-  - [ ] Budget-efficiency curves: performance vs context size (top-K and token budgets)
-  - [ ] Evidence support metrics: whether selected context contains answer spans/entities
-  - [ ] Ablations: remove temporal features, remove structured events, remove section features, compare learned vs RAG heuristics
-  - [ ] Error analysis: characterize failure modes (list omissions, temporal confusion, distractor overlap)
-- [ ] **Final write-up**
-- [ ] **Clean up code and turn in**
-- [ ] **Project poster**
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
+|---|---|---|---|---|---|---|
+| o4-mini | | | | | | |
+| gpt-4o-mini | | | | | | |
+| Llama-3-8B (HF) | | | | | | |
+| Mistral-7B (HF) | | | | | | |
+| Phi-3-mini (HF) | | | | | | |
 
 ### Extensions (optional, if time permits)
 
-- [ ] **Budget-efficiency curves** — Plot QA accuracy as a function of context size (top-K = 1, 3, 5, 10, 25 and token budgets) across all retrieval methods; show the learned selector achieves higher accuracy with fewer tokens
-- [ ] **Per-difficulty and per-question-type breakdown** — Report metrics split by question difficulty (easy/medium/hard) and question type (medications/diagnosis/labs/imaging/procedure) to identify where the learned selector helps most
-- [ ] **Additional open-source models** — Extend the model × retrieval matrix to more HuggingFace models (e.g., Gemma-2-9B, Qwen-2.5-7B) for a broader generalization claim
-- [ ] **Cross-encoder re-ranker** — Train a lightweight cross-encoder on (question, chunk) pairs as a second-stage re-ranker on top of the logistic regression's top-M candidates
-- [ ] **Qualitative case studies** — Select 5–10 representative questions and show side-by-side: what each retrieval method selected, what the LLM answered, and where errors occurred
-- [ ] **Clinician evaluation** — Have a domain expert review a sample of LLM answers to assess clinical correctness beyond automated metrics
+| Task | Owner | Status |
+|---|---|---|
+| **Budget-efficiency curves** — accuracy vs context size across all methods | ( ) | |
+| **Per-difficulty / per-question-type breakdown** — metrics by difficulty and question type | ( ) | |
+| **Additional open-source models** — Gemma-2-9B, Qwen-2.5-7B, etc. | ( ) | |
+| **Cross-encoder re-ranker** — second-stage re-ranker on top of logreg top-M | ( ) | |
+| **Qualitative case studies** — side-by-side comparison of retrieval + LLM answers | ( ) | |
+| **Clinician evaluation** — domain expert review of answer correctness | ( ) | |
 
 ---
 
