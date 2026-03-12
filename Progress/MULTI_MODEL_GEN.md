@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** HF infrastructure built — ready to run evaluations on GPU
+**Status:** Environment set up, tokenizers verified — ready to submit GPU jobs
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -22,16 +22,16 @@
 
 ## Final Model Selection
 
-After deliberation, the final matrix uses **4 models** (Phi-3-mini was dropped — its 128k context window flattens retrieval strategy differences, undermining our core narrative):
+The final matrix uses **4 models**. Llama-3-8B was replaced with Phi-3-mini-4k because gated HF access was not approved in time. Phi-3-mini-4k is actually *better* for the narrative — its 4k context window equals our token budget, so every strategy is maximally constrained. The original Phi-3-mini-128k was dropped for the opposite reason (context too large). Note: we requested the wrong Llama model initially (received approval for `Meta-Llama-Guard-2-8B`, a safety classifier, not an instruction model).
 
 | Model | HF ID | Context | Source | Status |
 |---|---|---|---|---|
 | o4-mini | `o4-mini` | 16k | OpenAI API | **Done (Phase 1)** |
 | gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | Not started |
-| Llama-3-8B-Instruct | `meta-llama/Meta-Llama-3-8B-Instruct` | 8k | HuggingFace | Not started |
-| Mistral-7B-Instruct | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | Not started |
+| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | Tokenizer verified |
+| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | Tokenizer verified |
 
-**Narrative:** Retrieval strategy matters most when context is tight. Llama-3-8B (8k) is the hero model — highest expected variance across strategies.
+**Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies.
 
 ---
 
@@ -401,6 +401,30 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 ---
 
 ## Bugs and Issues
+
+### Conda env at /scratch/users/nallen21/envs/ehr (3/12/26)
+- `micromamba` module not available on this farmshare instance
+- Used existing `~/miniconda3/bin/conda` instead
+- Env created at `/scratch/users/nallen21/envs/ehr` (not in home, avoids quota)
+- Python binary: `/scratch/users/nallen21/envs/ehr/bin/python`
+- All scripts updated to use this path directly
+
+### pip and HF caches → scratch (3/12/26)
+- `~/.cache/pip` (3.3GB) moved to `/scratch/users/nallen21/pip_cache_home`
+- `PIP_CACHE_DIR=/scratch/users/nallen21/pip_cache` added to `~/.bashrc`
+- `HF_HOME=/scratch/users/nallen21/hf_cache` already set
+- Future pip installs and model downloads will not consume home quota
+
+### Tokenizer smoke tests passed (3/12/26)
+- `microsoft/Phi-3-mini-4k-instruct`: vocab=32000, max_length=4096, chat template OK
+- `mistralai/Mistral-7B-Instruct-v0.3`: vocab=32768, chat template OK
+- Mistral reports nonsense `model_max_length` (library artifact) — actual limit is 32k
+- Mistral tokenizer defaults to `padding_side=right`; `HFRunner.__init__` overrides to `left`
+
+### Llama-3 access issue (3/12/26)
+- Requested `meta-llama/Meta-Llama-Guard-2-8B` by mistake (a safety classifier, not QA model)
+- Correct model needed: `meta-llama/Meta-Llama-3-8B-Instruct`
+- Replaced with `microsoft/Phi-3-mini-4k-instruct` for timeline reasons (fully open, no gating)
 
 ### Farmshare home directory quota exceeded (3/12/26)
 - **Symptom:** `EDQUOT: Disk quota exceeded` when trying to write any file

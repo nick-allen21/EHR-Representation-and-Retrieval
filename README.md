@@ -54,8 +54,8 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | — Score with ROUGE-L, token F1 | Nick | Done |
 | — LLM-as-judge scoring | Nick | In progress — designing prompt + running |
 | **Multi-model generalization (Phase 2)** | Nick | In progress |
-| — Extend `llm_runner.py` to support HuggingFace models | Nick | In progress |
-| — Set up HuggingFace inference (Llama-3-8B, Mistral-7B, Phi-3-mini) | Nick | In progress |
+| — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
+| — Set up HuggingFace inference (Mistral-7B, Phi-3-mini-4k) | Nick | Infrastructure done; GPU runs pending |
 | — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | o4-mini done, gpt-4o-mini pending |
 | — Run full model × retrieval matrix | Nick | |
 | **Learn better scoring functions** | | |
@@ -77,9 +77,8 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 |---|---|---|---|---|---|---|
 | o4-mini | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
 | gpt-4o-mini | | | | | | |
-| Llama-3-8B (HF) | | | | | | |
-| Mistral-7B (HF) | | | | | | |
-| Phi-3-mini (HF) | | | | | | |
+| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | | | | | | |
+| Phi-3-mini-4k-instruct (HF, 4k ctx) | | | | | | |
 
 ### Extensions (optional, if time permits)
 
