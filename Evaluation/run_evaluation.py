@@ -39,6 +39,26 @@ from Evaluation.context_builders import STRATEGIES, SYSTEM_PROMPT
 from Evaluation.llm_runner import LLMRunner
 from Evaluation.scoring import score_pair
 
+
+def _make_runner(args: argparse.Namespace):
+    """Return an LLMRunner or HFRunner depending on the model name.
+
+    HuggingFace model IDs always contain a '/' (e.g. 'meta-llama/Meta-Llama-3-8B-Instruct').
+    OpenAI model names never do (e.g. 'o4-mini', 'gpt-4o-mini').
+    """
+    if "/" in args.model:
+        from Evaluation.hf_runner import HFRunner
+        return HFRunner(
+            model_id=args.model,
+            cache_dir=args.cache_dir,
+            batch_size=args.hf_batch_size,
+        )
+    return LLMRunner(
+        model=args.model,
+        cache_dir=args.cache_dir,
+        concurrency=args.concurrency,
+    )
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -200,11 +220,7 @@ async def run(args: argparse.Namespace) -> None:
         log.error("No evaluation records found. Exiting.")
         return
 
-    runner = LLMRunner(
-        model=args.model,
-        cache_dir=args.cache_dir,
-        concurrency=args.concurrency,
-    )
+    runner = _make_runner(args)
 
     selector = None
     if args.method in ("learned", "all"):
@@ -276,7 +292,8 @@ def main():
     p.add_argument("--model-dir", default="data/models/logreg", help="Trained logreg model directory")
     p.add_argument("--output-dir", default=str(_RESULTS_DIR), help="Directory for result files")
     p.add_argument("--cache-dir", default="data/results/cache", help="LLM response cache directory")
-    p.add_argument("--concurrency", type=int, default=10, help="Max concurrent API calls")
+    p.add_argument("--concurrency", type=int, default=10, help="Max concurrent API calls (OpenAI only)")
+    p.add_argument("--hf-batch-size", type=int, default=4, help="GPU batch size for HuggingFace models")
     args = p.parse_args()
     asyncio.run(run(args))
 

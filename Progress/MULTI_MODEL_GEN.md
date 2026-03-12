@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** Planning complete — ready for implementation
+**Status:** HF infrastructure built — ready to run evaluations on GPU
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -365,12 +365,14 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 
 | File | Action | Status |
 |---|---|---|
-| `Evaluation/run_evaluation.py` | Edit — fix `_save_results` naming + add `_get_runner()` | Not started |
+| `Evaluation/run_evaluation.py` | Edit — add `_make_runner()` auto-dispatch + `--hf-batch-size` flag | **Done (3/12/26)** |
 | `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model tables | Not started |
-| `Evaluation/hf_runner.py` | **Create** — HuggingFace local inference runner | Not started |
+| `Evaluation/hf_runner.py` | **Created** — HuggingFace local inference runner, same interface as LLMRunner | **Done (3/12/26)** |
 | `Evaluation/llm_judge.py` | **Create** — post-processing LLM-as-judge script | Not started |
-| `requirements.txt` | Edit — bump `transformers>=4.40`, `accelerate>=0.27`; add `bitsandbytes>=0.41` | Not started |
-| `data/results/*.json` | Rename — add `o4-mini__` prefix to 6 existing files | Not started |
+| `requirements.txt` | Edit — bump `transformers>=4.40`, add `accelerate>=0.27` | **Done (3/12/26)** |
+| `scripts/setup_env.sh` | **Created** — micromamba env setup + HF_HOME redirect to scratch | **Done (3/12/26)** |
+| `scripts/run_hf_eval.sbatch` | **Created** — Slurm GPU batch job (normal partition, gpu QoS, L40S) | **Done (3/12/26)** |
+| `data/results/*.json` | Rename — add model prefix (handled via `--output-dir` per model) | Deferred — use separate output dirs instead |
 | `Progress/MULTI_MODEL_GEN.md` | Update continuously as work progresses | In progress |
 
 ---
@@ -400,7 +402,12 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 
 ## Bugs and Issues
 
-(To be filled as work progresses)
+### Farmshare home directory quota exceeded (3/12/26)
+- **Symptom:** `EDQUOT: Disk quota exceeded` when trying to write any file
+- **Cause:** 41GB `cs224n_final_project` + 4.3GB miniconda3 + 3.4GB `.cache/huggingface` ≈ 49GB, over quota
+- **Fix:** Moved `~/.cache/huggingface` to `/scratch/users/nallen21/hf_cache` (freed 3.4GB, quota OK again)
+- **Permanent fix:** `scripts/setup_env.sh` sets `HF_HOME=/scratch/users/.../hf_cache` so future model downloads go to scratch
+- **Note:** The symlink from `~/.cache/huggingface` → scratch failed (also quota blocked), so `HF_HOME` env var is used instead
 
 ---
 
