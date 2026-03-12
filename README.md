@@ -39,7 +39,7 @@ A supervised **L1-regularized logistic regression** model that learns to score a
   - [ ] Expand cohorts beyond initial subset to larger, diverse set of admissions
   - [ ] Set up held-out test set (currently only train/val; test needed for final evaluation)
   - [ ] Incorporate clinician-reviewed benchmark (EHRNoteQA) as primary evaluation dataset
-- [ ] **Set up downstream LLM evaluation (Phase 1: core comparison)**
+- [ ] **Set up downstream LLM evaluation (Phase 1: core comparison) --> Nick Owning & Starting - 3.11.26; 5pm**
   - [ ] Wire selected chunks into a frozen small LLM (e.g., o4-mini)
   - [ ] Implement all retrieval baselines: discharge-only, full-context, recency, BM25, semantic similarity RAG
   - [ ] Run learned selector vs all baselines on the same fixed LLM
