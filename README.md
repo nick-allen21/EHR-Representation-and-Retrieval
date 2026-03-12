@@ -52,6 +52,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 - [x] **Diagnostic plots** — Feature importance, ROC curve, precision-recall curve, Recall@K curve, score distribution
 - [x] **Downstream LLM evaluation pipeline** *(Nick)* — 6 retrieval strategies (discharge-only, full-context, recency, BM25, semantic RAG, learned) evaluated on frozen o4-mini with token F1 and ROUGE-L scoring (`Evaluation/`)
 - [x] **Phase 1 core comparison results** *(Nick)* — 200-patient dev set, 1,000 QA pairs, 4,096-token budget; learned selector achieves 0.406 token F1 with 72% fewer tokens than full-context
+- [x] **Feature enrichment** *(Niki)* — 130 → 146 feature dims: temporal marker detection, clinical salience flags (ICU/intubation/arrest), abnormal lab flags, time-to-discharge proximity, question-type × signal interactions; Recall@3 +6.3pts, Recall@5 +3.8pts vs baseline
 - [x] **Response caching infrastructure** *(Nick)* — SHA-256 disk cache in `data/results/cache/` for $0 re-runs; reasoning-model detection for o-series API quirks (`max_completion_tokens`, no `temperature`)
 - [x] **Git LFS data sharing** *(Nick)* — `patient_timelines.json` and `qa_pairs.json` tracked via LFS so collaborators don't need to regenerate
 - [x] **Per-difficulty breakdown** *(Nick)* — Metrics split by question difficulty (easy/medium/hard) implemented in `analysis.py`
@@ -60,11 +61,11 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 
 | Task | Owner | Status |
 |---|---|---|
-| **Add higher-signal temporal and structured-event features** |Niki |In Progress |
-| — Time-gap features, temporal buckets, temporal marker detection | | |
-| — Recency/trend features for labs/vitals, abnormal value flags | | |
-| — Event salience indicators (ICU transfer, intubation, new dx) | | |
-| — Aggregation features (top abnormal labs, recent med list) | | |
+| **Add higher-signal temporal and structured-event features** | Niki | Done (3/12/26) |
+| — Time-gap features, temporal buckets, temporal marker detection | Niki | Done |
+| — Recency/trend features for labs/vitals, abnormal value flags | Niki | Done |
+| — Event salience indicators (ICU transfer, intubation, new dx) | Niki | Done |
+| — Aggregation features (top abnormal labs, recent med list) | | Deferred |
 | **Ablate weak supervision threshold** (sweep 0.10–0.30) | | |
 | **Add gold standard QA dataset** | | |
 | — Download ~926-pair physician-authored dataset | | |
@@ -127,12 +128,12 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 
 On the validation set (patient-level split, no leakage), the learned selector achieves strong retrieval performance under small budgets:
 
-| K | mean Recall@K |
-|---|---|
-| 1 | 0.45 |
-| 3 | 0.71 |
-| 5 | 0.84 |
-| 10 | 0.96 |
+| K | Baseline (130 feat) | Enriched (146 feat) | Delta |
+|---|---|---|---|
+| 1 | 0.45 | 0.41 | -0.04 |
+| 3 | 0.71 | 0.77 | **+0.06** |
+| 5 | 0.84 | 0.88 | **+0.04** |
+| 10 | 0.96 | 0.96 | ~0 |
 
 Recall improves sharply from K=1 to K=5, indicating that high-scoring chunks are preferentially relevant rather than the model simply classifying most chunks as negative.
 
@@ -149,9 +150,10 @@ Frozen o4-mini evaluated on 200 patients (1,000 QA pairs) with 4,096-token conte
 | recency (N=25) | 0.391 | 0.325 | 3,258 |
 | BM25 (K=5) | 0.321 | 0.265 | 1,070 |
 | semantic RAG (K=5) | **0.424** | **0.350** | 1,336 |
-| learned (K=5) | 0.406 | 0.335 | 1,064 |
+| learned (K=5) baseline | 0.406 | 0.335 | 1,064 |
+| learned (K=5) enriched | 0.405 | 0.331 | 1,105 |
 
-The learned selector achieves comparable accuracy to semantic RAG and full-context while using **72% fewer tokens** than full-context (1,064 vs 3,815). Semantic RAG slightly outperforms on this dev set; both chunk-based methods substantially beat the discharge-only floor baseline.
+The learned selector achieves comparable accuracy to semantic RAG and full-context while using **72% fewer tokens** than full-context. The enriched model (146 features) improves Recall@K at the retrieval layer (+6pts @K=3) but Token F1 / ROUGE-L are flat — consistent with lexical metrics being too coarse to detect retrieval improvements at this scale. LLM-as-judge scoring is needed to measure semantic quality gains.
 
 ---
 

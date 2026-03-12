@@ -64,7 +64,7 @@ Every unit of work follows a strict **1:1:1:1 mapping**:
 
 ### Done section
 
-- When a TODO is complete, add a corresponding `[x]` entry to the **Done** section with your name in parentheses: `*(Nick)*`
+- When a TODO is complete, add a corresponding `[x]` entry to the **Done** section with your name in parentheses: ex. `*(Nick)*`
 - Include a brief summary of what was accomplished
 
 ### Results

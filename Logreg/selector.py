@@ -75,8 +75,13 @@ class ChunkSelector:
         question: str,
         note_text: str,
         K: int = 5,
+        dischtime: str | None = None,
     ) -> list[dict]:
         """Select the top-K most useful chunks from a discharge summary.
+
+        Args:
+            dischtime: ISO datetime string of discharge (e.g. "2180-06-27 14:30:00").
+                       Enables temporal proximity features. Pass None to omit.
 
         Returns a list of chunk dicts sorted by score (descending), each
         with an additional 'score' key containing the predicted probability.
@@ -84,6 +89,10 @@ class ChunkSelector:
         chunks = chunk_note(note_text, strategy=self.strategy)
         if not chunks:
             return []
+
+        if dischtime is not None:
+            for chunk in chunks:
+                chunk["_dischtime"] = dischtime
 
         scores  = self.score_chunks(question, chunks)
         top_idx = np.argsort(scores)[-K:][::-1]
