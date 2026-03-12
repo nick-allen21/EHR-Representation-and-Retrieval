@@ -36,7 +36,7 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 
 | Task | Owner | Status |
 |---|---|---|
-| **Add higher-signal temporal and structured-event features** | | |
+| **Add higher-signal temporal and structured-event features** |Niki |In Progress |
 | — Time-gap features, temporal buckets, temporal marker detection | | |
 | — Recency/trend features for labs/vitals, abnormal value flags | | |
 | — Event salience indicators (ICU transfer, intubation, new dx) | | |
