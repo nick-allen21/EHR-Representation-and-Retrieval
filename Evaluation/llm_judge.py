@@ -1,23 +1,39 @@
 """LLM-as-Judge: score predicted answers against gold using a clinical rubric.
 
-This is a **post-processing** script — it reads existing result JSON files
-produced by ``run_evaluation.py`` and adds an ``llm_judge_score`` (1–5) to
-each record.  It writes an augmented copy of each file with the suffix
-``_judged.json``.
+Two modes:
 
-The judge model (default: gpt-4o) evaluates each (question, gold, prediction)
-triple against a clinical correctness rubric.
+  **Normal run** (default): Adds ``judge_score`` (1–5) in-place to each result
+  file and saves rankings to ``judge_rankings.json`` and ``summary.json``.
+
+  **Dry-run** (``--dry-run``): Makes fresh API calls on a sample (bypasses the
+  main cache), prints the ranking table to stdout, and writes nothing to disk.
+  Useful for spot-checks and sanity tests.
 
 Usage
 -----
-# Pilot run — 50 questions per file, validate rubric
-python -m Evaluation.llm_judge --results-dir data/results --limit 50
+# Score all *__*.json files in data/results/ in-place
+python -m Evaluation.llm_judge
 
-# Full run — all questions in each result file
-python -m Evaluation.llm_judge --results-dir data/results
+# Score specific files only
+python -m Evaluation.llm_judge \\
+    --files data/results/o4-mini__full_context.json \\
+            data/results/o4-mini__semantic_rag_k5.json \\
+            data/results/o4-mini__learned_k5.json
 
-# Custom judge model and concurrency
-python -m Evaluation.llm_judge --judge-model gpt-4o --concurrency 20
+# Pilot / re-score: random sample of 100 questions per file
+python -m Evaluation.llm_judge --limit 100
+
+# Dry-run: fresh API calls on 50 questions, print table only, write nothing
+python -m Evaluation.llm_judge --dry-run --limit 50
+
+# Dry-run filtered to hard questions
+python -m Evaluation.llm_judge --dry-run --limit 30 --difficulty hard
+
+# Cheaper/faster judge model
+python -m Evaluation.llm_judge --dry-run --limit 50 --judge-model gpt-4o-mini
+
+# Rank only (no new API calls — reads existing judge_score fields)
+python -m Evaluation.llm_judge --rank-only
 """
 
 from __future__ import annotations
@@ -28,6 +44,7 @@ import json
 import logging
 import random
 import re
+import tempfile
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -39,7 +56,13 @@ log = logging.getLogger(__name__)
 
 _RESULTS_DIR = Path("data/results")
 
-# ── Clinical correctness rubric ──────────────────────────────────────────────
+_DEFAULT_FILES = [
+    "data/results/o4-mini__full_context.json",
+    "data/results/o4-mini__semantic_rag_k5.json",
+    "data/results/o4-mini__learned_k5.json",
+]
+
+# ── Clinical correctness rubric ───────────────────────────────────────────────
 
 JUDGE_SYSTEM_PROMPT = """\
 You are an expert clinical reviewer evaluating an AI question-answering system \
@@ -97,7 +120,12 @@ def _parse_score(raw: str) -> int | None:
     return None
 
 
-# ── Core judging logic ───────────────────────────────────────────────────────
+def _question_key(row: dict) -> tuple:
+    """Stable identifier for a question across strategy files."""
+    return (int(row["subject_id"]), int(row["hadm_id"]), row["question"].strip())
+
+
+# ── Core judge call ───────────────────────────────────────────────────────────
 
 async def judge_single(
     runner: LLMRunner,
@@ -116,114 +144,53 @@ async def judge_single(
     raw = result.get("answer", "").strip()
     score = _parse_score(raw)
     out = {
-        "llm_judge_score": score if score is not None else 0,
-        "llm_judge_raw": raw,
-        "llm_judge_cached": result.get("cached", False),
+        "score": score if score is not None else 0,
+        "raw": raw,
+        "cached": result.get("cached", False),
     }
     if score is None:
-        out["llm_judge_error"] = f"unparseable: {raw!r}"
+        out["error"] = f"unparseable: {raw!r}"
         log.warning("Unparseable judge response: %r", raw)
     return out
 
 
-async def judge_result_file(
+# ── Phase 1: Score files ──────────────────────────────────────────────────────
+
+async def _score_file(
     runner: LLMRunner,
-    input_path: Path,
-    output_path: Path,
+    path: Path,
     limit: int | None = None,
     seed: int = 42,
-) -> dict:
-    """Judge all (or a sample of) results in a file. Returns summary stats."""
-    records = json.loads(input_path.read_text())
-    if not isinstance(records, list):
-        log.warning("Skipping %s: not a list", input_path.name)
-        return {}
+    rescore: bool = False,
+) -> int:
+    """Add ``judge_score`` in-place to rows in *path*.
 
-    if limit and limit < len(records):
-        rng = random.Random(seed)
-        indices = sorted(rng.sample(range(len(records)), limit))
-        sample = [records[i] for i in indices]
+    Only rows without a score are judged unless *rescore=True*. Returns the
+    number of rows judged in this call.
+    """
+    rows = json.loads(path.read_text())
+    if not isinstance(rows, list) or not rows or "gold_answer" not in rows[0]:
+        log.warning("Skipping %s: not a valid result file", path.name)
+        return 0
+
+    # Identify rows that need scoring
+    if rescore:
+        to_score = list(rows)
     else:
-        sample = records
-        indices = list(range(len(records)))
+        to_score = [r for r in rows if r.get("judge_score", 0) == 0]
 
-    log.info(
-        "Judging %s: %d / %d records",
-        input_path.name, len(sample), len(records),
-    )
+    if not to_score:
+        log.info("%s: all rows already scored — skipping (use --rescore to force)", path.name)
+        return 0
 
-    tasks = []
-    for rec in sample:
-        question = rec.get("question", "")
-        gold = rec.get("gold_answer", "")
-        predicted = rec.get("answer", "")
-        tasks.append(judge_single(runner, question, gold, predicted))
+    if limit and limit < len(to_score):
+        rng = random.Random(seed)
+        to_score = rng.sample(to_score, limit)
 
-    scores = await asyncio.gather(*tasks)
+    log.info("Scoring %d / %d rows in %s", len(to_score), len(rows), path.name)
 
-    scored_records = list(records)
-    for idx, score_dict in zip(indices, scores):
-        scored_records[idx] = {**records[idx], **score_dict}
-
-    output_path.write_text(json.dumps(scored_records, indent=2))
-    log.info("Wrote judged results to %s", output_path.name)
-
-    valid_scores = [s["llm_judge_score"] for s in scores if s["llm_judge_score"] > 0]
-    errors = sum(1 for s in scores if s.get("llm_judge_error"))
-    cached = sum(1 for s in scores if s.get("llm_judge_cached"))
-
-    stats = {
-        "file": input_path.name,
-        "total": len(sample),
-        "scored": len(valid_scores),
-        "errors": errors,
-        "cached": cached,
-        "mean_score": sum(valid_scores) / len(valid_scores) if valid_scores else 0,
-        "score_dist": {
-            str(i): valid_scores.count(i) for i in range(1, 6)
-        },
-    }
-    return stats
-
-
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-async def _run(args: argparse.Namespace) -> None:
-    runner = LLMRunner(
-        model=args.judge_model,
-        cache_dir=args.cache_dir,
-        concurrency=args.concurrency,
-    )
-
-    results_dir = Path(args.results_dir)
-    output_dir = results_dir / "judged"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    result_files = sorted(results_dir.glob("*__*.json"))
-    if not result_files:
-        log.error("No result files matching *__*.json in %s", results_dir)
-        return
-
-    log.info("Found %d result files to judge", len(result_files))
-    all_stats: list[dict] = []
-    t0 = time.time()
-
-    for rf in result_files:
-        out_path = output_dir / rf.name.replace(".json", "_judged.json")
-        stats = await judge_result_file(
-            runner, rf, out_path,
-            limit=args.limit,
-            seed=args.seed,
-        )
-<<<<<<< HEAD
-        if stats:
-            all_stats.append(stats)
-            log.info(
-                "  %s: mean=%.2f, scored=%d/%d, errors=%d, cached=%d",
-                stats["file"], stats["mean_score"],
-                stats["scored"], stats["total"],
-                stats["errors"], stats["cached"],
-=======
+    judge_results = await asyncio.gather(*[
+        judge_single(runner, r.get("question", ""), r.get("gold_answer", ""), r.get("answer", ""))
         for r in to_score
     ])
 
@@ -236,32 +203,46 @@ async def _run(args: argparse.Namespace) -> None:
 
     path.write_text(json.dumps(rows, indent=2))
     n_valid = sum(1 for r in rows if r.get("judge_score", 0) > 0)
-    log.info("%s: wrote %d scores (%d / %d rows now have scores)", path.name, len(to_score), n_valid, len(rows))
+    log.info(
+        "%s: wrote %d scores (%d / %d rows now have scores)",
+        path.name, len(to_score), n_valid, len(rows),
+    )
     return len(to_score)
 
 
-# ── Phase 2: Rank ──────────────────────────────────────────────────────────────
+# ── Phase 2: Rank ─────────────────────────────────────────────────────────────
 
-def _question_key(row: dict) -> tuple:
-    """Stable identifier for a question across strategy files."""
-    return (int(row["subject_id"]), int(row["hadm_id"]), row["question"].strip())
+def _rank_strategies(
+    files: list[Path],
+    scored_rows: dict[str, list[dict]] | None = None,
+    difficulty_filter: str | None = None,
+) -> dict | None:
+    """Cross-reference judge scores across strategy files, print rankings, return data dict.
 
-
-def _rank_strategies(files: list[Path]) -> dict | None:
-    """Cross-reference judge scores across strategy files, print rankings, return data dict."""
-
-    # Load scored rows from each file, indexed by question key
+    If *scored_rows* is provided (dry-run path), use those rows instead of
+    reading from files.
+    """
     strategy_index: dict[str, dict[tuple, dict]] = {}
-    for path in files:
-        rows = json.loads(path.read_text())
-        if not isinstance(rows, list) or not rows or "gold_answer" not in rows[0]:
-            continue
-        name = path.stem  # e.g. "o4-mini__learned_k5"
-        strategy_index[name] = {
-            _question_key(r): r
-            for r in rows
-            if r.get("judge_score", 0) > 0
-        }
+
+    if scored_rows is not None:
+        # Dry-run: use the in-memory scored rows
+        for name, rows in scored_rows.items():
+            strategy_index[name] = {
+                _question_key(r): r
+                for r in rows
+                if r.get("judge_score", 0) > 0
+            }
+    else:
+        for path in files:
+            rows = json.loads(path.read_text())
+            if not isinstance(rows, list) or not rows or "gold_answer" not in rows[0]:
+                continue
+            name = path.stem
+            strategy_index[name] = {
+                _question_key(r): r
+                for r in rows
+                if r.get("judge_score", 0) > 0
+            }
 
     if not strategy_index:
         print("No scored rows found. Run without --rank-only first.")
@@ -269,49 +250,52 @@ def _rank_strategies(files: list[Path]) -> dict | None:
 
     strategies = sorted(strategy_index.keys())
 
-    # Find questions that appear in ALL strategies (for fair comparison)
+    # Questions scored in ALL strategies
     common_keys = set.intersection(*[set(idx.keys()) for idx in strategy_index.values()])
-    log.info("Questions scored in all %d strategies: %d", len(strategies), len(common_keys))
+
+    if difficulty_filter:
+        common_keys = {
+            k for k in common_keys
+            if (strategy_index[strategies[0]][k].get("difficulty") or "unknown") == difficulty_filter
+        }
 
     if not common_keys:
-        print("No questions scored across all strategies yet. Run scoring first.")
+        msg = f"No questions scored across all strategies"
+        if difficulty_filter:
+            msg += f" with difficulty='{difficulty_filter}'"
+        print(msg)
         return None
 
-    # Aggregate per strategy
-    wins: dict[str, float] = defaultdict(float)   # fractional wins (ties split)
+    log.info("Questions scored in all %d strategies: %d", len(strategies), len(common_keys))
+
+    # Aggregate
+    wins: dict[str, float] = defaultdict(float)
     scores: dict[str, list[float]] = defaultdict(list)
     score_dist: dict[str, dict[int, int]] = {s: defaultdict(int) for s in strategies}
+    difficulty_scores: dict[str, dict[str, list[float]]] = {s: defaultdict(list) for s in strategies}
 
     for key in common_keys:
         row_scores = {s: strategy_index[s][key]["judge_score"] for s in strategies}
         max_score = max(row_scores.values())
         winners = [s for s, sc in row_scores.items() if sc == max_score]
         for w in winners:
-            wins[w] += 1.0 / len(winners)  # split ties evenly
+            wins[w] += 1.0 / len(winners)
+        diff = strategy_index[strategies[0]][key].get("difficulty", "unknown") or "unknown"
         for s in strategies:
             scores[s].append(row_scores[s])
             score_dist[s][row_scores[s]] += 1
+            difficulty_scores[s][diff].append(row_scores[s])
 
     n = len(common_keys)
-
-    # Per-difficulty breakdown
-    difficulty_scores: dict[str, dict[str, list[float]]] = {s: defaultdict(list) for s in strategies}
-    for key in common_keys:
-        diff = strategy_index[strategies[0]][key].get("difficulty", "unknown") or "unknown"
-        for s in strategies:
-            difficulty_scores[s][diff].append(strategy_index[s][key]["judge_score"])
-
     difficulties = sorted({
         strategy_index[strategies[0]][k].get("difficulty", "unknown") or "unknown"
         for k in common_keys
     })
-
-    # Rank by win rate
     ranked = sorted(strategies, key=lambda s: -wins[s])
 
     # ── Print ──────────────────────────────────────────────────────────────────
     print(f"\n{'='*72}")
-    print(f"  LLM-as-Judge Rankings  (n={n} questions, judge shared across all strategies)")
+    print(f"  LLM-as-Judge Rankings  (n={n} questions)")
     print(f"{'='*72}")
     print(f"  {'#':<3} {'Strategy':<38} {'Mean Score':>10} {'Wins':>8} {'Win %':>8}")
     print(f"  {'-'*3} {'-'*38} {'-'*10} {'-'*8} {'-'*8}")
@@ -322,33 +306,24 @@ def _rank_strategies(files: list[Path]) -> dict | None:
         print(f"  {rank:<3} {strat:<38} {mean:>10.3f} {wins[strat]:>8.1f} {win_pct:>7.1f}%")
 
     print(f"\n  Score distribution (1=wrong → 5=perfect):")
-    score_labels = "  " + f"{'Strategy':<38}" + "".join(f"  [{i}]" for i in range(1, 6))
-    print(score_labels)
+    print("  " + f"{'Strategy':<38}" + "".join(f"  [{i}]" for i in range(1, 6)))
     for strat in ranked:
         dist_str = "".join(f"{score_dist[strat].get(i, 0):>5}" for i in range(1, 6))
         print(f"  {strat:<38}{dist_str}")
 
     if len(difficulties) > 1:
         print(f"\n  Mean judge score by difficulty:")
-        header = f"  {'Strategy':<38}" + "".join(f"  {d:>8}" for d in difficulties)
-        print(header)
+        print("  " + f"{'Strategy':<38}" + "".join(f"  {d:>8}" for d in difficulties))
         for strat in ranked:
             row_str = "".join(
                 f"  {sum(difficulty_scores[strat][d])/len(difficulty_scores[strat][d]):>8.3f}"
                 if difficulty_scores[strat][d] else f"  {'—':>8}"
                 for d in difficulties
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
             )
+            print(f"  {strat:<38}{row_str}")
 
-    elapsed = time.time() - t0
-    log.info("Done in %.1f seconds", elapsed)
+    print(f"{'='*72}\n")
 
-<<<<<<< HEAD
-    summary_path = output_dir / "judge_summary.json"
-    summary_path.write_text(json.dumps(all_stats, indent=2))
-    log.info("Summary written to %s", summary_path)
-=======
-    # ── Return structured data for saving ─────────────────────────────────────
     return {
         "n_questions": n,
         "strategies": strategies,
@@ -378,6 +353,8 @@ def _rank_strategies(files: list[Path]) -> dict | None:
         },
     }
 
+
+# ── Save helpers ──────────────────────────────────────────────────────────────
 
 def _save_judge_rankings(
     data: dict,
@@ -411,24 +388,19 @@ def _save_to_summary_json(
     judge_model: str,
     summary_path: Path,
 ) -> None:
-    """Merge judge_score_mean and judge_n into summary.json for each judged strategy.
-
-    summary.json uses short method names (e.g. "learned_k5"); strategy names here
-    include the model prefix (e.g. "o4-mini__learned_k5"). We strip the prefix to match.
-    """
+    """Merge judge_score_mean and judge_n into summary.json for each judged strategy."""
     if not summary_path.exists():
-        log.warning("summary.json not found at %s — skipping summary update", summary_path)
+        log.warning("summary.json not found at %s — skipping", summary_path)
         return
 
     summary = json.loads(summary_path.read_text())
 
     for entry in data["ranked"]:
-        strat = entry["strategy"]  # e.g. "o4-mini__learned_k5"
-        # Strip model prefix if present to match summary.json keys
+        strat = entry["strategy"]            # e.g. "o4-mini__learned_k5"
         method_key = strat.split("__", 1)[-1]  # "learned_k5"
 
         if method_key not in summary:
-            log.warning("Strategy %r (key %r) not found in summary.json — skipping", strat, method_key)
+            log.warning("Strategy %r not found in summary.json — skipping", method_key)
             continue
 
         summary[method_key]["judge_score_mean"] = entry["mean_score"]
@@ -438,70 +410,161 @@ def _save_to_summary_json(
     summary_path.write_text(json.dumps(summary, indent=2))
     log.info("Updated judge_score_mean in %s", summary_path)
 
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
 
-    runner_stats = runner.stats()
-    log.info(
-        "Runner stats: total=%d, cached=%d, errors=%d",
-        runner_stats.get("total", 0),
-        runner_stats.get("cache_hits", 0),
-        runner_stats.get("errors", 0),
+# ── CLI runner ────────────────────────────────────────────────────────────────
+
+async def _run(args: argparse.Namespace) -> None:
+    t0 = time.time()
+
+    # Resolve file list
+    if args.files:
+        files = [Path(f) for f in args.files]
+    else:
+        files = sorted(Path(args.results_dir).glob("*__*.json"))
+        if not files:
+            log.error("No result files matching *__*.json in %s", args.results_dir)
+            return
+
+    # ── Dry-run: fresh API calls, print only, write nothing ───────────────────
+    if args.dry_run:
+        tmp_cache = tempfile.mkdtemp(prefix="judge_fresh_")
+        runner = LLMRunner(
+            model=args.judge_model,
+            cache_dir=tmp_cache,
+            concurrency=args.concurrency,
+        )
+
+        # Load all rows, find common questions across files
+        idx: dict[str, dict[tuple, dict]] = {}
+        for path in files:
+            if not path.exists():
+                print(f"[skip] {path} not found")
+                continue
+            rows = json.loads(path.read_text())
+            if not isinstance(rows, list) or not rows or "gold_answer" not in rows[0]:
+                print(f"[skip] {path.name} — not a valid result file")
+                continue
+            idx[path.stem] = {_question_key(r): r for r in rows}
+
+        if not idx:
+            print("No valid result files found.")
+            return
+
+        strategies = sorted(idx.keys())
+        common = list(set.intersection(*[set(v.keys()) for v in idx.values()]))
+
+        if args.difficulty:
+            common = [
+                k for k in common
+                if (idx[strategies[0]][k].get("difficulty") or "unknown") == args.difficulty
+            ]
+            if not common:
+                print(f"No questions with difficulty='{args.difficulty}'")
+                return
+
+        limit = args.limit or 50
+        if limit < len(common):
+            rng = random.Random(args.seed)
+            common = rng.sample(common, limit)
+
+        n = len(common)
+        n_calls = n * len(strategies)
+        diff_note = f", difficulty={args.difficulty}" if args.difficulty else ""
+        print(f"\nDry-run: {n} questions{diff_note}, {len(strategies)} strategies, {n_calls} fresh API calls")
+        print(f"Judge model: {args.judge_model}  |  seed={args.seed}")
+        print("Running (no files will be written)...\n")
+
+        # Score all questions concurrently
+        async def _judge_one(key: tuple, strategy: str) -> dict:
+            row = idx[strategy][key]
+            jr = await judge_single(
+                runner,
+                row.get("question", ""),
+                row.get("gold_answer", ""),
+                row.get("answer", ""),
+            )
+            return {
+                **row,
+                "judge_score": jr["score"],
+                "_strategy": strategy,
+                "_key": key,
+            }
+
+        tasks = [_judge_one(k, s) for k in common for s in strategies]
+        results = await asyncio.gather(*tasks)
+
+        # Rebuild scored_rows for _rank_strategies
+        scored_rows: dict[str, list[dict]] = {s: [] for s in strategies}
+        for r in results:
+            scored_rows[r["_strategy"]].append(r)
+
+        _rank_strategies(files, scored_rows=scored_rows, difficulty_filter=None)
+        print(f"API stats: {runner.stats}")
+        print(f"(temp cache at {tmp_cache} — not saved to project)\n")
+        return
+
+    # ── Rank-only: read existing judge_score fields, no API calls ─────────────
+    if args.rank_only:
+        existing_files = [f for f in files if f.exists()]
+        if not existing_files:
+            print("No result files found.")
+            return
+        data = _rank_strategies(existing_files, difficulty_filter=args.difficulty)
+        return
+
+    # ── Normal run: score in-place, then save rankings ─────────────────────────
+    runner = LLMRunner(
+        model=args.judge_model,
+        cache_dir=args.cache_dir,
+        concurrency=args.concurrency,
     )
 
-    print("\n=== LLM-as-Judge Summary ===\n")
-    print(f"{'File':<55s}  {'Mean':>5s}  {'N':>4s}  {'Err':>3s}")
-    print("-" * 75)
-    for s in all_stats:
-        print(
-            f"{s['file']:<55s}  {s['mean_score']:>5.2f}  "
-            f"{s['scored']:>4d}  {s['errors']:>3d}"
-        )
-    print("-" * 75)
-    if all_stats:
-        overall = sum(s["mean_score"] * s["scored"] for s in all_stats) / max(
-            sum(s["scored"] for s in all_stats), 1
-        )
-<<<<<<< HEAD
-        print(f"{'Overall weighted mean':<55s}  {overall:>5.2f}")
-=======
+    total_judged = 0
+    for path in files:
+        if not path.exists():
+            log.warning("File not found: %s", path)
+            continue
+        n = await _score_file(runner, path, limit=args.limit, seed=args.seed, rescore=args.rescore)
+        total_judged += n
 
-    data = _rank_strategies(files)
+    elapsed = time.time() - t0
+    log.info("Scoring done: %d rows judged in %.1f seconds", total_judged, elapsed)
+    log.info("Runner stats: %s", runner.stats)
+
+    # Rank and save
+    existing_files = [f for f in files if f.exists()]
+    data = _rank_strategies(existing_files, difficulty_filter=args.difficulty)
 
     if data is not None:
-        results_dir = files[0].parent
-        _save_judge_rankings(data, args.judge_model, files, results_dir / "judge_rankings.json")
+        results_dir = Path(args.results_dir)
+        _save_judge_rankings(data, args.judge_model, existing_files, results_dir / "judge_rankings.json")
         _save_to_summary_json(data, args.judge_model, results_dir / "summary.json")
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
 
 
-def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     p = argparse.ArgumentParser(
         description="Run LLM-as-judge scoring on evaluation result files",
     )
+
+    # File selection
+    p.add_argument(
+        "--files", nargs="+", default=None, metavar="PATH",
+        help=(
+            "Specific result JSON files to judge (default: all *__*.json in --results-dir). "
+            "Example: data/results/o4-mini__full_context.json data/results/o4-mini__learned_k5.json"
+        ),
+    )
     p.add_argument(
         "--results-dir", type=Path, default=_RESULTS_DIR,
-        help="Directory containing {model}__{method}.json files",
+        help="Directory containing {model}__{method}.json files (default: data/results)",
     )
+
+    # Judge settings
     p.add_argument(
         "--judge-model", default="gpt-4o",
-<<<<<<< HEAD
-        help="OpenAI model to use as judge (default: gpt-4o)",
-=======
         help="OpenAI model used as judge (default: gpt-4o)",
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
-    )
-    p.add_argument(
-        "--limit", type=int, default=None,
-        help="Max questions to judge per file (random sample; default: all)",
-    )
-    p.add_argument(
-        "--seed", type=int, default=42,
-        help="Random seed for sampling (default: 42)",
     )
     p.add_argument(
         "--concurrency", type=int, default=15,
@@ -509,9 +572,45 @@ def main():
     )
     p.add_argument(
         "--cache-dir", type=Path, default=Path("data/results/cache"),
-        help="Disk cache directory for judge responses",
+        help="Disk cache directory for judge responses (default: data/results/cache)",
     )
+
+    # Sampling
+    p.add_argument(
+        "--limit", type=int, default=None,
+        help="Max questions to judge per file / dry-run (random sample; default: all / 50 for dry-run)",
+    )
+    p.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed for sampling (default: 42)",
+    )
+    p.add_argument(
+        "--difficulty", choices=["easy", "medium", "hard"], default=None,
+        help="Filter to a specific difficulty level",
+    )
+
+    # Mode flags
+    p.add_argument(
+        "--dry-run", action="store_true",
+        help=(
+            "Fresh trial run: make real API calls on a sample, print table only, "
+            "write nothing to disk. Bypasses the main cache."
+        ),
+    )
+    p.add_argument(
+        "--rank-only", action="store_true",
+        help="Print rankings from existing judge_score fields only (no API calls, no writes)",
+    )
+    p.add_argument(
+        "--rescore", action="store_true",
+        help="Re-score rows that already have a judge_score (normal run only)",
+    )
+
     args = p.parse_args()
+
+    if args.dry_run and args.rank_only:
+        p.error("--dry-run and --rank-only are mutually exclusive")
+
     asyncio.run(_run(args))
 
 

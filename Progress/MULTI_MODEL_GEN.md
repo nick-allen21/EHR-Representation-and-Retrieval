@@ -158,13 +158,17 @@ CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gp
 
 | Flag | Default | Description |
 |---|---|---|
-| `--files PATH [PATH ...]` | `o4-mini__full_context.json o4-mini__semantic_rag_k5.json o4-mini__learned_k5.json` | Result files to judge. Pass as space-separated paths. |
+| `--files PATH [PATH ...]` | all `*__*.json` in `--results-dir` | Specific result files to judge. Overrides `--results-dir` glob. |
+| `--results-dir PATH` | `data/results` | Directory to glob for `*__*.json` files (ignored if `--files` is set). |
 | `--judge-model MODEL` | `gpt-4o` | OpenAI model used as judge. Use `--judge-model gpt-4o-mini` for cheap pilots (~20x cheaper). |
-| `--limit N` | `200` | Max rows to **newly** score per file. Rows that already have a `judge_score` are skipped (unless `--rescore`). |
-| `--cache-dir PATH` | `data/results/cache` | Directory for LLM response cache. |
-| `--concurrency N` | `15` | Max parallel judge API calls. |
-| `--rescore` | off | Re-judge rows that already have a `judge_score`. Useful if rubric or model changes. |
-| `--rank-only` | off | Skip all API calls; just load existing `judge_score` fields and print the ranking table. Free. |
+| `--limit N` | all / 50 for dry-run | Max rows to newly score per file (normal) or questions to sample (dry-run). |
+| `--seed N` | `42` | Random seed for sampling. |
+| `--difficulty` | all | Filter to `easy`, `medium`, or `hard` questions (dry-run and rank-only). |
+| `--cache-dir PATH` | `data/results/cache` | Disk cache for LLM responses. |
+| `--concurrency N` | `15` | Max concurrent judge API calls. |
+| `--dry-run` | off | **Fresh trial run** — bypass main cache, make real API calls on a sample, print table only, write nothing to disk. |
+| `--rank-only` | off | Print rankings from existing `judge_score` fields only. Zero API calls, zero writes. |
+| `--rescore` | off | Re-judge rows that already have a `judge_score` (normal run only). |
 
 #### Common invocations
 
@@ -172,17 +176,34 @@ CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gp
 # ── View current rankings instantly (no API calls, uses cached scores) ──
 python -m Evaluation.llm_judge --rank-only
 
-# ── Default: gpt-4o judge, first 200 rows/file, 3 strategies (~$0.10) ──
-python -m Evaluation.llm_judge
+# ── Dry-run: fresh API calls on 50 questions, print only, write nothing ──
+python -m Evaluation.llm_judge --dry-run --limit 50
+
+# ── Dry-run, hard questions only ──
+python -m Evaluation.llm_judge --dry-run --limit 30 --difficulty hard
+
+# ── Dry-run with gpt-4o-mini (cheaper) ──
+python -m Evaluation.llm_judge --dry-run --limit 50 --judge-model gpt-4o-mini
+
+# ── Default: gpt-4o judge, first 200 rows/file, 3 strategies (~$0.10), saves in-place ──
+python -m Evaluation.llm_judge \
+    --files data/results/o4-mini__full_context.json \
+            data/results/o4-mini__semantic_rag_k5.json \
+            data/results/o4-mini__learned_k5.json
 
 # ── Cheap pilot: gpt-4o-mini, first 200 rows/file (~$0.02) ──
-python -m Evaluation.llm_judge --judge-model gpt-4o-mini
+python -m Evaluation.llm_judge \
+    --files data/results/o4-mini__full_context.json \
+            data/results/o4-mini__semantic_rag_k5.json \
+            data/results/o4-mini__learned_k5.json \
+    --judge-model gpt-4o-mini
 
 # ── Extend to all 1,000 rows/file (gpt-4o, ~$2 total) ──
-python -m Evaluation.llm_judge --limit 1000
-
-# ── All 1,000 rows cheap (gpt-4o-mini, ~$0.10 total) ──
-python -m Evaluation.llm_judge --judge-model gpt-4o-mini --limit 1000
+python -m Evaluation.llm_judge \
+    --files data/results/o4-mini__full_context.json \
+            data/results/o4-mini__semantic_rag_k5.json \
+            data/results/o4-mini__learned_k5.json \
+    --limit 1000
 
 # ── Judge all 6 o4-mini strategy files ──
 python -m Evaluation.llm_judge \
@@ -203,7 +224,10 @@ python -m Evaluation.llm_judge \
 python -m Evaluation.llm_judge --rank-only | tee data/results/judge_rankings.txt
 
 # ── Re-score everything (e.g. after changing the rubric) ──
-python -m Evaluation.llm_judge --rescore --limit 200
+python -m Evaluation.llm_judge --rescore --limit 200 \
+    --files data/results/o4-mini__full_context.json \
+            data/results/o4-mini__semantic_rag_k5.json \
+            data/results/o4-mini__learned_k5.json
 ```
 
 #### Cost estimates (approximate)
@@ -469,26 +493,16 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-<<<<<<< HEAD
 2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1491077`
-3. Once Phi-3 SLURM job completes, score results and fill in matrix row 5 (the last empty row)
-4. Run LLM-as-judge: `python -m Evaluation.llm_judge --limit 200` (pilot) then full run
-5. Update matrices with LLM-judge scores (new column)
-=======
-2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)  ← still needed if not done
-3. Run `smoke_test_models.py` on FarmShare to verify Llama-3.1-8B-Instruct tokenizer
-4. Run gpt-4o-mini locally as a pipeline smoke test
-5. Submit SLURM jobs for the 3 HF models
-6. Implement Step 2 (analysis.py multi-model grouping) once results exist
-7. ~~Build llm_judge.py~~ — **Done (3/13/26)**. See `Evaluation/llm_judge.py`.
-8. Once HF runs complete: run `python -m Evaluation.llm_judge --judge-model gpt-4o-mini` on all model result files to fill judge scores for the full matrix.
+3. All 5 model rows are filled (30/30 cells) — matrix is complete
+4. Run LLM-as-judge on all result files to fill the judge-score column
 
 **LLM-as-judge current state (3/13/26):**
-- `Evaluation/llm_judge.py` created with two-phase score+rank flow
-- Pilot scores written: 200 rows × 3 strategies (full_context, semantic_rag_k5, learned_k5)
-- Judge model: gpt-4o (default). Pilot was run with gpt-4o-mini via `--judge-model gpt-4o-mini`.
-- Run `python -m Evaluation.llm_judge --rank-only` to see current rankings instantly (free)
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
+- `Evaluation/llm_judge.py` fully implemented — conflict-resolved, two modes: normal (saves in-place) and `--dry-run` (fresh API calls, print only)
+- Pilot scores written (gpt-4o-mini): ~395 rows across full_context, semantic_rag_k5, learned_k5
+- Default judge model: gpt-4o. Pass `--judge-model gpt-4o-mini` for cheaper runs.
+- View current rankings instantly (free): `python -m Evaluation.llm_judge --rank-only`
+- Fresh spot-check (no saves): `python -m Evaluation.llm_judge --dry-run --limit 50`
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
