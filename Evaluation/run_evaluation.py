@@ -39,6 +39,26 @@ from Evaluation.context_builders import STRATEGIES, SYSTEM_PROMPT
 from Evaluation.llm_runner import LLMRunner
 from Evaluation.scoring import score_pair
 
+
+def _make_runner(args: argparse.Namespace):
+    """Return an LLMRunner or HFRunner depending on the model name.
+
+    HuggingFace model IDs always contain a '/' (e.g. 'meta-llama/Meta-Llama-3-8B-Instruct').
+    OpenAI model names never do (e.g. 'o4-mini', 'gpt-4o-mini').
+    """
+    if "/" in args.model:
+        from Evaluation.hf_runner import HFRunner
+        return HFRunner(
+            model_id=args.model,
+            cache_dir=args.cache_dir,
+            batch_size=args.hf_batch_size,
+        )
+    return LLMRunner(
+        model=args.model,
+        cache_dir=args.cache_dir,
+        concurrency=args.concurrency,
+    )
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -171,11 +191,12 @@ async def _run_strategy(
 
 # ── Save results ──────────────────────────────────────────────────────────────
 
-def _save_results(results: list[dict], method: str, output_dir: Path) -> Path:
+def _save_results(results: list[dict], method: str, output_dir: Path, model: str = "unknown") -> Path:
     """Write results to a JSON file, stripping the full prompt to save space."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    tag = results[0]["method"] if results else method
-    path = output_dir / f"{tag}.json"
+    tag = results[0].get("method", method) if results else method
+    model_slug = model.replace("/", "--")
+    path = output_dir / f"{model_slug}__{tag}.json"
 
     slim = []
     for r in results:
@@ -200,11 +221,7 @@ async def run(args: argparse.Namespace) -> None:
         log.error("No evaluation records found. Exiting.")
         return
 
-    runner = LLMRunner(
-        model=args.model,
-        cache_dir=args.cache_dir,
-        concurrency=args.concurrency,
-    )
+    runner = _make_runner(args)
 
     selector = None
     if args.method in ("learned", "all"):
@@ -242,7 +259,7 @@ async def run(args: argparse.Namespace) -> None:
             token_budget=args.token_budget,
             **strategy_kwargs.get(method, {}),
         )
-        _save_results(results, method, Path(args.output_dir))
+        _save_results(results, method, Path(args.output_dir), model=args.model)
 
     stats = runner.stats
     log.info(
@@ -276,7 +293,8 @@ def main():
     p.add_argument("--model-dir", default="data/models/logreg", help="Trained logreg model directory")
     p.add_argument("--output-dir", default=str(_RESULTS_DIR), help="Directory for result files")
     p.add_argument("--cache-dir", default="data/results/cache", help="LLM response cache directory")
-    p.add_argument("--concurrency", type=int, default=10, help="Max concurrent API calls")
+    p.add_argument("--concurrency", type=int, default=10, help="Max concurrent API calls (OpenAI only)")
+    p.add_argument("--hf-batch-size", type=int, default=4, help="GPU batch size for HuggingFace models")
     args = p.parse_args()
     asyncio.run(run(args))
 

@@ -16,7 +16,8 @@ scikit-learn>=1.3
 
 # Deep learning — representation learning, temporal modeling
 torch>=2.0
-transformers>=4.36
+transformers>=4.40
+accelerate>=0.27
 
 # Retrieval baselines — semantic similarity (RAG)
 sentence-transformers>=2.2
