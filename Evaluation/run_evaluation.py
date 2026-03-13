@@ -91,6 +91,7 @@ def _build_eval_records(
         pairs = [
             qa for qa in (rec.get("qa_pairs") or [])
             if qa.get("question") and qa.get("answer")
+            and qa.get("correct", True) is not False
         ]
         if pairs:
             qa_index[key] = pairs

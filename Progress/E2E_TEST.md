@@ -76,3 +76,46 @@ Run the full evaluation pipeline end-to-end with 200 patients across all 5 model
 - `data/results/plots/multi_model_comparison.png` — grouped bar chart
 - `data/results/plots/token_f1_heatmap.png` — heatmap of Token F1
 - All 30 `data/results/{model}__{strategy}.json` files now contain `judge_score` fields
+
+---
+
+## Phase 2: Physician-Verified QA Set Evaluation
+
+**Date:** March 13, 2026
+**Branch:** `nallen21/verified-qa-eval`
+**Status:** In progress — preprocessing blocked on BigQuery auth; code changes done
+
+### Motivation
+
+The Phase 1 E2E test used GPT-4o-generated QA pairs, creating a circular LLM-generates/LLM-evaluates loop. The physician-verified set (`mimic_iv_note_qa_verified.json`) provides human-validated ground truth: 70 patients, 478 correct QA pairs (28 marked incorrect by physician review), and **zero patient overlap** with the 200-patient dev set.
+
+### Code changes completed
+
+1. **`Preprocess/run_pipeline.py`** — Added `--qa-csv` and `--output` CLI flags so the pipeline can generate timelines for a different patient set without modifying `config.yaml` or overwriting existing timelines.
+
+2. **`Evaluation/run_evaluation.py`** — Added filtering in `_build_eval_records` to drop QA pairs where `correct == False`. Uses `qa.get("correct", True) is not False` so it's backward-compatible with the generated QA set (which has no `correct` field).
+
+### Remaining steps
+
+- [ ] **Generate verified patient timelines** — Run `python -m Preprocess.run_pipeline --qa-csv data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.csv --output data/processed/patient_timelines_verified.json --format json`. Requires BigQuery authentication (GCP ADC credentials linked to PhysioNet account). Will be run locally where BigQuery access is configured.
+- [ ] **Run evaluation on verified set (OpenAI models)**:
+  ```bash
+  python -m Evaluation.run_evaluation \
+      --model o4-mini --method all \
+      --timelines data/processed/patient_timelines_verified.json \
+      --qa-data data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json \
+      --output-dir data/results/verified --limit 70
+
+  python -m Evaluation.run_evaluation \
+      --model gpt-4o-mini --method all \
+      --timelines data/processed/patient_timelines_verified.json \
+      --qa-data data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json \
+      --output-dir data/results/verified --limit 70
+  ```
+- [ ] **Run evaluation on verified set (HF models via SLURM)** — Submit `sbatch` jobs for Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k pointing at verified timelines/QA data with `--output-dir data/results/verified`
+- [ ] **Run analysis + LLM-as-judge on verified results**:
+  ```bash
+  python -m Evaluation.analysis --results-dir data/results/verified --plots
+  python -m Evaluation.llm_judge --files data/results/verified/*__*.json --limit 200
+  ```
+- [ ] **Document results** — Update this file and README.md with verified-set matrices
