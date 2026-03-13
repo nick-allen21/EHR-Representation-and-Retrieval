@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** All 5 models complete (30/30 cells); LLM-as-judge code ready, not yet run
+**Status:** All 5 models complete (30/30 cells); LLM-as-judge run on all 30 cells (3/13/26)
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -493,6 +493,7 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
+<<<<<<< HEAD
 2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1491077`
 3. All 5 model rows are filled (30/30 cells) — matrix is complete
 4. Run LLM-as-judge on all result files to fill the judge-score column
@@ -503,6 +504,18 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 - Default judge model: gpt-4o. Pass `--judge-model gpt-4o-mini` for cheaper runs.
 - View current rankings instantly (free): `python -m Evaluation.llm_judge --rank-only`
 - Fresh spot-check (no saves): `python -m Evaluation.llm_judge --dry-run --limit 50`
+=======
+2. All 30 matrix cells filled (5 models × 6 strategies). Full end-to-end test completed 3/13/26.
+3. LLM-as-judge: 50–200 rows scored per file across all 30 cells. Rankings in `data/results/judge_rankings.json`
+4. To extend: `python -m Evaluation.llm_judge --files data/results/*__*.json --limit 1000`
+5. To view rankings (free): `python -m Evaluation.llm_judge --files data/results/*__*.json --rank-only`
+
+**LLM-as-judge current state (3/13/26):**
+- All 30 model×strategy files scored (gpt-4o-mini judge)
+- Top strategies by mean score: o4-mini full_context (3.28), o4-mini semantic_rag (3.56), o4-mini learned (3.46)
+- Phi-3-mini-4k scores lowest (1.4–2.9) due to 4k context truncation
+- `_save_to_summary_json` warns for multi-model (summary.json aggregates by strategy, not model×strategy)
+>>>>>>> 5beda65baccc39a6b900b0198f405d565b7054fa
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`

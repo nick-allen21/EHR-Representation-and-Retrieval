@@ -81,7 +81,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | Nick | Done |
 | — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
 | — Score with ROUGE-L, token F1 | Nick | Done |
-| — LLM-as-judge scoring | Nick | Code ready (`llm_judge.py`), not yet run |
+| — LLM-as-judge scoring | Nick | Done (3/13/26) — all 30 cells scored |
 | **Multi-model generalization (Phase 2)** | Nick | In progress |
 | — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
 | — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Done — all 3 models complete |
@@ -90,9 +90,10 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | **Learn better scoring functions** | | |
 | — MLP ranker on frozen embeddings | | |
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
+| **Full E2E test (200 patients, 5 models × 6 strategies)** | Nick | **Done (3/13/26)** — see `Progress/E2E_TEST.md` |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
-| — LLM-as-judge prompt design and execution | Nick | Prompt + code done; not yet run |
+| — LLM-as-judge prompt design and execution | Nick | Done — rankings in `judge_rankings.json` |
 | — Evidence support metrics | | |
 | — Feature group ablations | | |
 | — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
@@ -114,11 +115,13 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 
 |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
 |---|---|---|---|---|---|---|
-| o4-mini (OpenAI, 16k ctx) | 0.289 | 0.338 | 0.325 | 0.265 | **0.350** | 0.335 |
+| o4-mini (OpenAI, 16k ctx) | 0.289 | 0.338 | 0.325 | 0.265 | **0.350** | 0.331 |
 | gpt-4o-mini (OpenAI, 128k ctx) | 0.354 | 0.386 | 0.385 | 0.316 | **0.404** | 0.379 |
 | Llama-3.1-8B-Instruct (HF, 128k ctx) | 0.275 | 0.312 | 0.303 | 0.266 | 0.329 | **0.329** |
 | Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | 0.306 | 0.327 | 0.332 | 0.281 | **0.346** | 0.330 |
 | Phi-3-mini-4k-instruct (HF, 4k ctx) | 0.102 | 0.152 | 0.199 | 0.203 | **0.249** | 0.242 |
+
+**LLM-as-judge (gpt-4o-mini, 1–5 scale):** All 30 cells scored. Rankings in `data/results/judge_rankings.json`. Top by mean score: o4-mini full_context (3.28), o4-mini semantic_rag (3.56), o4-mini learned (3.46). Phi-3-mini-4k scores lowest (1.4–2.9) due to 4k context truncation.
 
 ### Extensions (optional, if time permits)
 
