@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=ehr-hf-eval
-#SBATCH --partition=normal
-#SBATCH --qos=gpu
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
@@ -17,19 +16,17 @@
 #   sbatch scripts/run_hf_eval.sbatch microsoft/Phi-3-mini-4k-instruct
 #
 # The first positional argument is the HF model ID.
-# Results go to data/results/<model-slug>/ (separate from OpenAI results).
+# Results go to data/results/ with model prefix in filenames.
 
 set -euo pipefail
 
 MODEL_ID="${1:-mistralai/Mistral-7B-Instruct-v0.3}"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CONDA="${CONDA_EXE:-${HOME}/miniconda3/bin/conda}"
 ENV_PREFIX="/scratch/users/${USER}/envs/ehr"
 
-MODEL_SLUG="$(echo "${MODEL_ID}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')"
-OUTPUT_DIR="${REPO_ROOT}/data/results/${MODEL_SLUG}"
 LOG_DIR="${REPO_ROOT}/logs"
-mkdir -p "${OUTPUT_DIR}" "${LOG_DIR}"
+mkdir -p "${LOG_DIR}"
 
 # ── Environment ──────────────────────────────────────────────────────────────
 SCRATCH_HF="/scratch/users/${USER}/hf_cache"
@@ -41,7 +38,6 @@ export PIP_CACHE_DIR="/scratch/users/${USER}/pip_cache"
 
 # Load .env for HF_TOKEN and OPENAI_API_KEY
 set -a
-# shellcheck source=../.env
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
 
@@ -50,7 +46,6 @@ echo "Job ID      : ${SLURM_JOB_ID}"
 echo "Node        : $(hostname)"
 echo "GPU         : $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'unknown')"
 echo "Model       : ${MODEL_ID}"
-echo "Output dir  : ${OUTPUT_DIR}"
 echo "HF cache    : ${SCRATCH_HF}"
 echo "Conda env   : ${ENV_PREFIX}"
 echo "=============================="
@@ -58,11 +53,8 @@ echo "=============================="
 # ── Run evaluation (all 6 strategies) ────────────────────────────────────────
 cd "${REPO_ROOT}"
 
-"${CONDA}" run --prefix "${ENV_PREFIX}" --no-banner python -m Evaluation.run_evaluation \
+"${CONDA}" run --prefix "${ENV_PREFIX}" python -m Evaluation.run_evaluation \
     --model "${MODEL_ID}" \
     --method all \
     --limit 200 \
-    --token-budget 4096 \
-    --output-dir "${OUTPUT_DIR}"00 \
-    --token-budget 4096 \
-    --output-dir "${OUTPUT_DIR}"
+    --token-budget 4096
