@@ -90,6 +90,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | **Learn better scoring functions** | | |
 | — MLP ranker on frozen embeddings | | |
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
+| **Full E2E test (200 patients, 5 models × 6 strategies)** | Nick | **Done (3/13/26)** — see `Progress/E2E_TEST.md` |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
 | — LLM-as-judge prompt design and execution | Nick | Done — rankings in `judge_rankings.json` |
