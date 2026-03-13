@@ -1,0 +1,82 @@
+{
+  "metadata": {
+    "judge_model": "gpt-4o-mini",
+    "n_questions_common": 395,
+    "files_judged": [
+      "o4-mini__full_context",
+      "o4-mini__semantic_rag_k5",
+      "o4-mini__learned_k5"
+    ],
+    "per_strategy_n_scored": {
+      "o4-mini__full_context": 395,
+      "o4-mini__learned_k5": 395,
+      "o4-mini__semantic_rag_k5": 395
+    },
+    "timestamp": "2026-03-13T19:25:24.923780+00:00",
+    "note": "n_questions_common is questions scored in ALL judged strategies. per_strategy_n_scored shows total scored rows per file (may differ if files were scored at different limits)."
+  },
+  "ranked": [
+    {
+      "rank": 1,
+      "strategy": "o4-mini__full_context",
+      "mean_score": 3.3291,
+      "wins": 140.67,
+      "win_pct": 35.61,
+      "n": 395,
+      "score_dist": {
+        "1": 62,
+        "2": 83,
+        "3": 53,
+        "4": 57,
+        "5": 140
+      }
+    },
+    {
+      "rank": 2,
+      "strategy": "o4-mini__learned_k5",
+      "mean_score": 3.3823,
+      "wins": 128.67,
+      "win_pct": 32.57,
+      "n": 395,
+      "score_dist": {
+        "1": 50,
+        "2": 92,
+        "3": 48,
+        "4": 67,
+        "5": 138
+      }
+    },
+    {
+      "rank": 3,
+      "strategy": "o4-mini__semantic_rag_k5",
+      "mean_score": 3.4709,
+      "wins": 125.67,
+      "win_pct": 31.81,
+      "n": 395,
+      "score_dist": {
+        "1": 42,
+        "2": 82,
+        "3": 60,
+        "4": 70,
+        "5": 141
+      }
+    }
+  ],
+  "by_difficulty": {
+    "easy": {
+      "o4-mini__full_context": 3.3111,
+      "o4-mini__learned_k5": 3.8111,
+      "o4-mini__semantic_rag_k5": 3.7556
+    },
+    "hard": {
+      "o4-mini__full_context": 3.1013,
+      "o4-mini__learned_k5": 3.3418,
+      "o4-mini__semantic_rag_k5": 3.2532
+    },
+    "medium": {
+      "o4-mini__full_context": 3.4159,
+      "o4-mini__learned_k5": 3.2257,
+      "o4-mini__semantic_rag_k5": 3.4336
+    }
+  }
+}

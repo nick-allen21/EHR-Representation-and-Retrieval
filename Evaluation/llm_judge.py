@@ -29,6 +29,8 @@ import logging
 import random
 import re
 import time
+from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from Evaluation.llm_runner import LLMRunner
@@ -213,6 +215,7 @@ async def _run(args: argparse.Namespace) -> None:
             limit=args.limit,
             seed=args.seed,
         )
+<<<<<<< HEAD
         if stats:
             all_stats.append(stats)
             log.info(
@@ -220,14 +223,222 @@ async def _run(args: argparse.Namespace) -> None:
                 stats["file"], stats["mean_score"],
                 stats["scored"], stats["total"],
                 stats["errors"], stats["cached"],
+=======
+        for r in to_score
+    ])
+
+    for row, jr in zip(to_score, judge_results):
+        row["judge_score"] = jr["score"]
+        if "error" in jr:
+            row["judge_error"] = jr["error"]
+        else:
+            row.pop("judge_error", None)
+
+    path.write_text(json.dumps(rows, indent=2))
+    n_valid = sum(1 for r in rows if r.get("judge_score", 0) > 0)
+    log.info("%s: wrote %d scores (%d / %d rows now have scores)", path.name, len(to_score), n_valid, len(rows))
+    return len(to_score)
+
+
+# ── Phase 2: Rank ──────────────────────────────────────────────────────────────
+
+def _question_key(row: dict) -> tuple:
+    """Stable identifier for a question across strategy files."""
+    return (int(row["subject_id"]), int(row["hadm_id"]), row["question"].strip())
+
+
+def _rank_strategies(files: list[Path]) -> dict | None:
+    """Cross-reference judge scores across strategy files, print rankings, return data dict."""
+
+    # Load scored rows from each file, indexed by question key
+    strategy_index: dict[str, dict[tuple, dict]] = {}
+    for path in files:
+        rows = json.loads(path.read_text())
+        if not isinstance(rows, list) or not rows or "gold_answer" not in rows[0]:
+            continue
+        name = path.stem  # e.g. "o4-mini__learned_k5"
+        strategy_index[name] = {
+            _question_key(r): r
+            for r in rows
+            if r.get("judge_score", 0) > 0
+        }
+
+    if not strategy_index:
+        print("No scored rows found. Run without --rank-only first.")
+        return None
+
+    strategies = sorted(strategy_index.keys())
+
+    # Find questions that appear in ALL strategies (for fair comparison)
+    common_keys = set.intersection(*[set(idx.keys()) for idx in strategy_index.values()])
+    log.info("Questions scored in all %d strategies: %d", len(strategies), len(common_keys))
+
+    if not common_keys:
+        print("No questions scored across all strategies yet. Run scoring first.")
+        return None
+
+    # Aggregate per strategy
+    wins: dict[str, float] = defaultdict(float)   # fractional wins (ties split)
+    scores: dict[str, list[float]] = defaultdict(list)
+    score_dist: dict[str, dict[int, int]] = {s: defaultdict(int) for s in strategies}
+
+    for key in common_keys:
+        row_scores = {s: strategy_index[s][key]["judge_score"] for s in strategies}
+        max_score = max(row_scores.values())
+        winners = [s for s, sc in row_scores.items() if sc == max_score]
+        for w in winners:
+            wins[w] += 1.0 / len(winners)  # split ties evenly
+        for s in strategies:
+            scores[s].append(row_scores[s])
+            score_dist[s][row_scores[s]] += 1
+
+    n = len(common_keys)
+
+    # Per-difficulty breakdown
+    difficulty_scores: dict[str, dict[str, list[float]]] = {s: defaultdict(list) for s in strategies}
+    for key in common_keys:
+        diff = strategy_index[strategies[0]][key].get("difficulty", "unknown") or "unknown"
+        for s in strategies:
+            difficulty_scores[s][diff].append(strategy_index[s][key]["judge_score"])
+
+    difficulties = sorted({
+        strategy_index[strategies[0]][k].get("difficulty", "unknown") or "unknown"
+        for k in common_keys
+    })
+
+    # Rank by win rate
+    ranked = sorted(strategies, key=lambda s: -wins[s])
+
+    # ── Print ──────────────────────────────────────────────────────────────────
+    print(f"\n{'='*72}")
+    print(f"  LLM-as-Judge Rankings  (n={n} questions, judge shared across all strategies)")
+    print(f"{'='*72}")
+    print(f"  {'#':<3} {'Strategy':<38} {'Mean Score':>10} {'Wins':>8} {'Win %':>8}")
+    print(f"  {'-'*3} {'-'*38} {'-'*10} {'-'*8} {'-'*8}")
+
+    for rank, strat in enumerate(ranked, 1):
+        mean = sum(scores[strat]) / len(scores[strat])
+        win_pct = 100.0 * wins[strat] / n
+        print(f"  {rank:<3} {strat:<38} {mean:>10.3f} {wins[strat]:>8.1f} {win_pct:>7.1f}%")
+
+    print(f"\n  Score distribution (1=wrong → 5=perfect):")
+    score_labels = "  " + f"{'Strategy':<38}" + "".join(f"  [{i}]" for i in range(1, 6))
+    print(score_labels)
+    for strat in ranked:
+        dist_str = "".join(f"{score_dist[strat].get(i, 0):>5}" for i in range(1, 6))
+        print(f"  {strat:<38}{dist_str}")
+
+    if len(difficulties) > 1:
+        print(f"\n  Mean judge score by difficulty:")
+        header = f"  {'Strategy':<38}" + "".join(f"  {d:>8}" for d in difficulties)
+        print(header)
+        for strat in ranked:
+            row_str = "".join(
+                f"  {sum(difficulty_scores[strat][d])/len(difficulty_scores[strat][d]):>8.3f}"
+                if difficulty_scores[strat][d] else f"  {'—':>8}"
+                for d in difficulties
+>>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
             )
 
     elapsed = time.time() - t0
     log.info("Done in %.1f seconds", elapsed)
 
+<<<<<<< HEAD
     summary_path = output_dir / "judge_summary.json"
     summary_path.write_text(json.dumps(all_stats, indent=2))
     log.info("Summary written to %s", summary_path)
+=======
+    # ── Return structured data for saving ─────────────────────────────────────
+    return {
+        "n_questions": n,
+        "strategies": strategies,
+        "ranked": [
+            {
+                "rank": rank,
+                "strategy": strat,
+                "mean_score": round(sum(scores[strat]) / len(scores[strat]), 4),
+                "wins": round(wins[strat], 2),
+                "win_pct": round(100.0 * wins[strat] / n, 2),
+                "n": len(scores[strat]),
+                "score_dist": {str(i): score_dist[strat].get(i, 0) for i in range(1, 6)},
+            }
+            for rank, strat in enumerate(ranked, 1)
+        ],
+        "by_difficulty": {
+            diff: {
+                strat: round(sum(difficulty_scores[strat][diff]) / len(difficulty_scores[strat][diff]), 4)
+                if difficulty_scores[strat][diff] else None
+                for strat in ranked
+            }
+            for diff in difficulties
+        },
+        "per_strategy_n_scored": {
+            strat: len(strategy_index[strat])
+            for strat in strategies
+        },
+    }
+
+
+def _save_judge_rankings(
+    data: dict,
+    judge_model: str,
+    files: list[Path],
+    out_path: Path,
+) -> None:
+    """Save the full rankings table to judge_rankings.json."""
+    output = {
+        "metadata": {
+            "judge_model": judge_model,
+            "n_questions_common": data["n_questions"],
+            "files_judged": [p.stem for p in files],
+            "per_strategy_n_scored": data["per_strategy_n_scored"],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "note": (
+                "n_questions_common is questions scored in ALL judged strategies. "
+                "per_strategy_n_scored shows total scored rows per file (may differ if "
+                "files were scored at different limits)."
+            ),
+        },
+        "ranked": data["ranked"],
+        "by_difficulty": data["by_difficulty"],
+    }
+    out_path.write_text(json.dumps(output, indent=2))
+    log.info("Saved judge rankings → %s", out_path)
+
+
+def _save_to_summary_json(
+    data: dict,
+    judge_model: str,
+    summary_path: Path,
+) -> None:
+    """Merge judge_score_mean and judge_n into summary.json for each judged strategy.
+
+    summary.json uses short method names (e.g. "learned_k5"); strategy names here
+    include the model prefix (e.g. "o4-mini__learned_k5"). We strip the prefix to match.
+    """
+    if not summary_path.exists():
+        log.warning("summary.json not found at %s — skipping summary update", summary_path)
+        return
+
+    summary = json.loads(summary_path.read_text())
+
+    for entry in data["ranked"]:
+        strat = entry["strategy"]  # e.g. "o4-mini__learned_k5"
+        # Strip model prefix if present to match summary.json keys
+        method_key = strat.split("__", 1)[-1]  # "learned_k5"
+
+        if method_key not in summary:
+            log.warning("Strategy %r (key %r) not found in summary.json — skipping", strat, method_key)
+            continue
+
+        summary[method_key]["judge_score_mean"] = entry["mean_score"]
+        summary[method_key]["judge_n"] = entry["n"]
+        summary[method_key]["judge_model"] = judge_model
+
+    summary_path.write_text(json.dumps(summary, indent=2))
+    log.info("Updated judge_score_mean in %s", summary_path)
+
+>>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
 
     runner_stats = runner.stats()
     log.info(
@@ -250,7 +461,17 @@ async def _run(args: argparse.Namespace) -> None:
         overall = sum(s["mean_score"] * s["scored"] for s in all_stats) / max(
             sum(s["scored"] for s in all_stats), 1
         )
+<<<<<<< HEAD
         print(f"{'Overall weighted mean':<55s}  {overall:>5.2f}")
+=======
+
+    data = _rank_strategies(files)
+
+    if data is not None:
+        results_dir = files[0].parent
+        _save_judge_rankings(data, args.judge_model, files, results_dir / "judge_rankings.json")
+        _save_to_summary_json(data, args.judge_model, results_dir / "summary.json")
+>>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
 
 
 def main():
@@ -268,7 +489,11 @@ def main():
     )
     p.add_argument(
         "--judge-model", default="gpt-4o",
+<<<<<<< HEAD
         help="OpenAI model to use as judge (default: gpt-4o)",
+=======
+        help="OpenAI model used as judge (default: gpt-4o)",
+>>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
     )
     p.add_argument(
         "--limit", type=int, default=None,
