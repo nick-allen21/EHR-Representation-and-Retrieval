@@ -20,8 +20,9 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 MODELS = [
-    "microsoft/Phi-3-mini-4k-instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
     "mistralai/Mistral-7B-Instruct-v0.3",
+    "microsoft/Phi-3-mini-4k-instruct",
 ]
 
 SAMPLE_MESSAGES = [

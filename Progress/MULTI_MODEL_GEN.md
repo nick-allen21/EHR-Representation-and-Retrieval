@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** Environment set up, tokenizers verified — ready to submit GPU jobs
+**Status:** Infrastructure complete — code changes done, scripts fixed, ready to run models
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -14,7 +14,7 @@
 
 ## Objectives
 
-1. **Fill the model × retrieval matrix** — Run all 6 retrieval strategies across 4 frozen LLMs to show the learned retrieval layer generalizes across architectures
+1. **Fill the model × retrieval matrix** — Run all 6 retrieval strategies across **5 frozen LLMs** to show the learned retrieval layer generalizes across architectures
 2. **Design and run LLM-as-judge** — Create a clinical rubric prompt and score all strategy outputs on a 1–5 correctness scale using gpt-4o
 3. **Produce a complete results table** with Token F1, ROUGE-L, and LLM-judge scores per cell
 
@@ -22,50 +22,51 @@
 
 ## Final Model Selection
 
-The final matrix uses **4 models**. Llama-3-8B was replaced with Phi-3-mini-4k because gated HF access was not approved in time. Phi-3-mini-4k is actually *better* for the narrative — its 4k context window equals our token budget, so every strategy is maximally constrained. The original Phi-3-mini-128k was dropped for the opposite reason (context too large). Note: we requested the wrong Llama model initially (received approval for `Meta-Llama-Guard-2-8B`, a safety classifier, not an instruction model).
+The matrix uses **5 models**. We originally dropped Llama because gated access was requested for the wrong model (`Meta-Llama-Guard-2-8B`, a safety classifier). Access to `meta-llama/Llama-3.1-8B` (covering all variants including Instruct) was approved on 3/12/26, so Llama is back in. Phi-3-mini-4k is kept because its 4k context window exactly matches our token budget, maximizing variance across strategies.
 
 | Model | HF ID | Context | Source | Status |
 |---|---|---|---|---|
 | o4-mini | `o4-mini` | 16k | OpenAI API | **Done (Phase 1)** |
 | gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | Not started |
+| Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | Access approved; tokenizer not yet verified |
 | Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | Tokenizer verified |
 | Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | Tokenizer verified |
 
-**Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies.
+**Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies. The spread from 4k (Phi-3) to 128k (Llama-3.1, gpt-4o-mini) shows whether the retrieval advantage holds across radically different context windows.
 
 ---
 
-## Current State (inherited from Phase 1)
+## Current State
 
-### What exists
+### What exists (inherited from Phase 1 + Phase 2 infrastructure)
 
 - `Evaluation/llm_runner.py` — async OpenAI wrapper with disk cache and reasoning-model detection
-- `Evaluation/run_evaluation.py` — CLI orchestrator with `--model` and `--method` flags
+- `Evaluation/run_evaluation.py` — CLI orchestrator with `--model`, `--method`, `--hf-batch-size` flags; `_make_runner()` auto-dispatches to HFRunner or LLMRunner based on model name
+- `Evaluation/hf_runner.py` — **Created (3/12/26)** — HuggingFace local inference runner matching LLMRunner interface (generate, generate_batch, stats, SHA-256 cache)
 - `Evaluation/scoring.py` — `token_f1()`, `rouge_l()`, and `llm_judge()` stub with 1–5 rubric
 - `Evaluation/context_builders.py` — 6 retrieval strategies, all model-agnostic
+- `scripts/smoke_test_models.py` — **Created (3/12/26)** — tokenizer verification for all 3 HF models
+- `scripts/setup_env.sh` — **Created (3/12/26)** — FarmShare one-time setup (conda env, cache redirects to scratch)
+- `scripts/run_hf_eval.sbatch` — **Created (3/12/26)** — SLURM GPU batch job template
 - o4-mini row fully populated (Token F1 and ROUGE-L for all 6 strategies)
 - Response cache at `data/results/cache/` (5,859 entries from Phase 1)
-- Existing result files: `data/results/{method}.json` (no model prefix — must be migrated)
+- Existing Phase 1 result files: `data/results/{method}.json` — **need renaming** to `o4-mini__{method}.json` (see Step 0)
 
-### Critical bug in current code (must fix before running anything)
+### Critical bug — FIXED (3/12/26)
 
-`_save_results()` in `run_evaluation.py` (line 178) saves to `{method}.json`:
-```python
-path = output_dir / f"{tag}.json"  # BUG: no model prefix
-```
-Running gpt-4o-mini **will silently overwrite** the o4-mini results. Fix this first.
+`_save_results()` previously saved to `{method}.json` with no model prefix. Now saves to `{model_slug}__{method}.json`. The call site passes `model=args.model`. Existing Phase 1 files still need renaming (Step 0).
 
 ---
 
 ## Implementation Plan
 
-### Step 0: Migrate existing result files
+### Step 0: Migrate existing result files — **TODO (manual)**
 
-Rename the 6 existing Phase 1 result files to include the model prefix before touching any code:
+Rename the 6 existing Phase 1 result files to match the new `{model}__{method}.json` convention:
 
 ```bash
 cd data/results
-for f in discharge_only.json full_context.json recency.json bm25.json semantic_rag.json learned.json; do
+for f in bm25_k5.json discharge_only.json full_context.json learned_k5.json recency_n25.json semantic_rag_k5.json; do
   mv "$f" "o4-mini__${f}"
 done
 ```
@@ -74,55 +75,25 @@ Verify: `ls data/results/o4-mini__*.json` should show 6 files.
 
 ---
 
-### Step 1: Fix output file naming in `run_evaluation.py`
+### Step 1: Fix output file naming in `run_evaluation.py` — **DONE (3/12/26)**
 
-**File:** `Evaluation/run_evaluation.py`
-
-Change `_save_results` signature and path construction:
-
-```python
-# OLD (line 174–178):
-def _save_results(results: list[dict], method: str, output_dir: Path) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tag = results[0]["method"] if results else method
-    path = output_dir / f"{tag}.json"
-
-# NEW:
-def _save_results(results: list[dict], method: str, output_dir: Path, model: str = "unknown") -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tag = results[0].get("method", method)
-    model_slug = model.replace("/", "--")
-    path = output_dir / f"{model_slug}__{tag}.json"
-```
-
-Update the call site in `run()` (line 245):
-```python
-# OLD:
-_save_results(results, method, Path(args.output_dir))
-
-# NEW:
-_save_results(results, method, Path(args.output_dir), model=args.model)
-```
+`_save_results` now takes a `model` parameter and writes `{model_slug}__{tag}.json`. Call site passes `model=args.model`.
 
 ---
 
-### Step 2: Update `analysis.py` for multi-model grouping
+### Step 2: Update `analysis.py` for multi-model grouping — **TODO**
 
 **File:** `Evaluation/analysis.py`
 
 `load_all_results` currently returns `{method: [results]}`. Change it to parse model and method from the new `{model}__{method}.json` filename pattern, and fall back gracefully for old-style filenames:
 
 ```python
-# In load_all_results(), change the key extraction logic:
-# For filename "o4-mini__bm25.json" → key = ("o4-mini", "bm25")
-# For filename "bm25.json" (old style) → key = ("unknown", "bm25")
-
 def load_all_results(results_dir: str | Path = "data/results") -> dict:
     """Returns {(model, method): [result_dicts]}"""
     results_dir = Path(results_dir)
     data = {}
     for p in sorted(results_dir.glob("*.json")):
-        stem = p.stem  # e.g. "o4-mini__bm25" or "bm25"
+        stem = p.stem
         if "__" in stem:
             model_slug, method = stem.split("__", 1)
         else:
@@ -131,128 +102,75 @@ def load_all_results(results_dir: str | Path = "data/results") -> dict:
     return data
 ```
 
-Update `summary_table()` and `export_summary_json()` to group by model, then method, producing the model × retrieval matrix.
+Update `summary_table()` and `export_summary_json()` to group by model, then method, producing the 5×6 matrix.
 
 ---
 
-### Step 3: Add runner routing to `run_evaluation.py`
+### Step 3: Add runner routing to `run_evaluation.py` — **DONE (3/12/26)**
 
-**File:** `Evaluation/run_evaluation.py`
-
-Add a `_get_runner()` helper near the top of the `run()` function, before the existing `LLMRunner` instantiation (line 203):
-
-```python
-def _get_runner(args):
-    """Route to OpenAI or HuggingFace runner based on model name."""
-    if "/" in args.model:
-        from Evaluation.hf_runner import HFRunner
-        return HFRunner(
-            model_id=args.model,
-            cache_dir=args.cache_dir,
-        )
-    return LLMRunner(
-        model=args.model,
-        cache_dir=args.cache_dir,
-        concurrency=args.concurrency,
-    )
-```
-
-Replace the `LLMRunner(...)` instantiation block (lines 203–207) with:
-```python
-runner = _get_runner(args)
-```
-
-Convention: any model with a `/` in its name (e.g. `meta-llama/Meta-Llama-3-8B-Instruct`) routes to `HFRunner`. OpenAI model names never contain `/`.
+Implemented as `_make_runner(args)`. Convention: any model with `/` in its name routes to `HFRunner`; OpenAI model names never contain `/`.
 
 ---
 
-### Step 4: Build `Evaluation/hf_runner.py`
+### Step 4: Build `Evaluation/hf_runner.py` — **DONE (3/12/26), updated (3/12/26)**
 
-**New file.** Must match `LLMRunner` interface exactly so `run_evaluation.py` needs no other changes.
-
-Interface contract:
-```python
-class HFRunner:
-    model: str  # the model_id passed in
-
-    def __init__(self, model_id: str, cache_dir: str | Path = "data/results/cache", batch_size: int = 4): ...
-    async def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.3, max_tokens: int = 512) -> dict: ...
-    async def generate_batch(self, items: list[dict], system_prompt: str, temperature: float = 0.3, max_tokens: int = 512) -> list[dict]: ...
-    @property
-    def stats(self) -> dict: ...  # {cache_hits, api_calls, errors}
-```
-
-Implementation notes:
-- Load model at `__init__` time: `AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="auto")`
-- Apply chat templates via `tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)` — all three target models ship their templates in the tokenizer config, so this is automatic
-- HF inference is synchronous. Wrap in `asyncio.to_thread()` inside `generate()` to avoid blocking the event loop
-- `generate_batch()` processes items in batches of `batch_size` (default 4) sequentially via `asyncio.to_thread(self._run_batch, batch)`
-- Cache using same SHA256 scheme as `LLMRunner` (keyed on `model_id + messages`)
-- Token counts: use `len(tokenizer(text).input_ids)` for prompt tokens; derive completion tokens from output length minus input length
-- Return dict: `{answer, prompt_tokens, completion_tokens, cached}` — identical to `LLMRunner`
-- `max_tokens` defaults to 512 for generation (HF models typically produce verbose completions; keep this lower than the OpenAI default of 4096)
-
-**Reasoning model detection is not needed** — HF models are not reasoning models.
+Full implementation matching `LLMRunner` interface. Key details:
+- GPU batched inference with left-padding
+- SHA-256 disk cache (same scheme as `LLMRunner`)
+- `max_length` for input truncation derived from `model.config.max_position_embeddings` (not hardcoded)
+- Logs a warning when input truncation occurs
+- Supported models: Llama-3.1-8B-Instruct, Mistral-7B-Instruct-v0.3, Phi-3-mini-4k-instruct
 
 ---
 
-### Step 5: Build `Evaluation/llm_judge.py`
+### Step 5: Build `Evaluation/llm_judge.py` — **TODO**
 
-**New file.** Post-processing script that runs LLM-as-judge on existing result files. Runs independently of `run_evaluation.py` — does not need to be integrated into the main eval loop.
+Post-processing script that runs LLM-as-judge on existing result files. Runs independently of `run_evaluation.py`.
 
-The stub in `scoring.py` lines 54–66 has a rubric. Extend it with a full clinical correctness prompt:
-
+Clinical correctness rubric (1–5 scale):
 ```
-System:
-You are a clinical expert evaluating AI-generated answers to questions about patient records.
-Score the predicted answer on a 1–5 scale based on clinical correctness and completeness.
-
 5 — Completely correct and complete. All relevant clinical facts present.
 4 — Mostly correct. Minor omissions or imprecision that would not affect clinical decisions.
 3 — Partially correct. Key facts present but important details missing or imprecise.
 2 — Mostly incorrect. Answer is related to the question but contains significant errors.
 1 — Incorrect or irrelevant. Answer does not address the question or contains harmful errors.
-
-Respond with only a JSON object: {"score": <int>, "reasoning": "<1 sentence>"}
-
-User:
-Question: {question}
-Gold answer: {gold_answer}
-Predicted answer: {predicted_answer}
 ```
 
-CLI usage:
-```bash
-python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o --limit 200
-```
+CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o --limit 200`
 
-Saves judge scores back to result files as `llm_judge_score` and `llm_judge_reasoning` fields (or writes a parallel `{model_slug}__{method}__judge.json`).
-
-**Cost note:** gpt-4o judge on 4 models × 6 strategies × 1,000 Qs = 24,000 calls ≈ $50–100. Consider sampling 200 Qs per cell first to validate the rubric before full run.
+**Cost note:** gpt-4o judge on 5 models × 6 strategies × 1,000 Qs = 30,000 calls ≈ $60–120. Sample 200 Qs per cell first to validate the rubric.
 
 ---
 
 ## Execution Order
 
 ```
-Step 0:  Rename existing result files (bash, 1 minute)
-Step 1:  Edit run_evaluation.py — fix _save_results naming (10 min)
-Step 2:  Edit analysis.py — multi-model grouping (30 min)
-Step 3:  Edit run_evaluation.py — add _get_runner() routing (10 min)
-Step 4:  Create hf_runner.py (1–2 hrs)
-Step 5:  Run gpt-4o-mini (local, ~$8, fills row 2 of matrix)
-Step 6:  FarmShare GPU setup (see below)
-Step 7:  Run Llama-3-8B on FarmShare (compute only, fills row 3)
-Step 8:  Run Mistral-7B on FarmShare (compute only, fills row 4)
-Step 9:  Create llm_judge.py + design prompt (1 hr)
-Step 10: Run LLM-as-judge on all result files (~$50)
-Step 11: Update README.md matrix with final numbers
+Step 0:  Rename existing result files (bash, 1 minute)                    ← TODO (manual)
+Step 1:  Fix _save_results naming in run_evaluation.py                    ✓ DONE (3/12/26)
+Step 2:  Edit analysis.py — multi-model grouping (30 min)                 ← TODO
+Step 3:  Add _make_runner() routing in run_evaluation.py                  ✓ DONE (3/12/26)
+Step 4:  Create hf_runner.py                                              ✓ DONE (3/12/26)
+Step 5:  Run gpt-4o-mini (local, ~$8, fills row 2 of matrix)             ← NEXT
+Step 6:  Run smoke_test_models.py on FarmShare (verify Llama tokenizer)   ← NEXT
+Step 7:  Run Llama-3.1-8B on FarmShare (compute only, fills row 3)       ← NEXT
+Step 8:  Run Mistral-7B on FarmShare (compute only, fills row 4)         ← NEXT
+Step 9:  Run Phi-3-mini-4k on FarmShare (compute only, fills row 5)      ← NEXT
+Step 10: Create llm_judge.py + design prompt (1 hr)                       ← TODO
+Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO
+Step 12: Update analysis.py + README.md matrix with final numbers         ← TODO
 ```
 
-Run gpt-4o-mini command (after Steps 0–4):
+Run gpt-4o-mini command (after Step 0):
 ```bash
-conda run -n ehr python -m Evaluation.run_evaluation \
+python -m Evaluation.run_evaluation \
   --method all --model gpt-4o-mini --limit 200
+```
+
+Run HF models on FarmShare:
+```bash
+sbatch scripts/run_hf_eval.sbatch meta-llama/Llama-3.1-8B-Instruct
+sbatch scripts/run_hf_eval.sbatch mistralai/Mistral-7B-Instruct-v0.3
+sbatch scripts/run_hf_eval.sbatch microsoft/Phi-3-mini-4k-instruct
 ```
 
 ---
@@ -261,102 +179,94 @@ conda run -n ehr python -m Evaluation.run_evaluation \
 
 Docs: https://docs.farmshare.stanford.edu/
 
-FarmShare uses SLURM. The HF models need a GPU node with ≥16 GB VRAM (fp16) or ≥8 GB (4-bit quant).
+FarmShare uses SLURM (v25.11.1). GPU nodes are called **oat** servers and have NVIDIA L40S GPUs (4 per node). The HF models need ≥16 GB VRAM (fp16) or ≥8 GB (4-bit quant). L40S has 48 GB so all models fit comfortably in fp16.
+
+**Important:** FarmShare does **not** have a `micromamba` module. Use `~/miniconda3/bin/conda` (already installed). The conda env lives at `/scratch/users/nallen21/envs/ehr` to avoid home quota issues.
 
 ### 1. SSH into FarmShare
 
 ```bash
-ssh <sunetid>@rice.stanford.edu
+ssh nallen21@rice.stanford.edu
 ```
 
-### 2. Clone the repo
+### 2. Clone/update the repo
 
 ```bash
-cd $SCRATCH   # or $HOME — use $SCRATCH for large data files
-git clone https://github.com/<org>/EHR-Representation-and-Retrieval.git
-cd EHR-Representation-and-Retrieval
-git checkout nallen21/multi-model-gen
+cd ~/EHR-Representation-and-Retrieval   # or wherever the repo lives
+git pull origin nallen21/multi-model-gen
 ```
 
-### 3. Set up conda environment
+### 3. Set up conda environment (one-time)
 
 ```bash
-module load anaconda
-conda create -n ehr python=3.11 -y
-conda activate ehr
-pip install -r requirements.txt
+bash scripts/setup_env.sh
 ```
 
-### 4. Copy `.env` (never commit this)
-
-From your local machine:
+Or manually:
 ```bash
-scp .env <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/.env
+CONDA=~/miniconda3/bin/conda
+$CONDA create --prefix /scratch/users/nallen21/envs/ehr python=3.11 pip -y
+$CONDA run --prefix /scratch/users/nallen21/envs/ehr pip install -r requirements.txt
+```
+
+### 4. Ensure `.env` exists on FarmShare (never commit this)
+
+```bash
+# From local machine:
+scp .env nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/.env
 ```
 
 The `.env` must contain:
 ```
 OPENAI_API_KEY=sk-...     # Not needed for HF models, but needed for judge
-HF_TOKEN=hf_...           # Required for gated models (Llama-3, Mistral)
+HF_TOKEN=hf_...           # Required for gated models (Llama-3.1)
 ```
 
-### 5. Copy data files (or use Git LFS)
+### 5. Data files (Git LFS)
 
-`patient_timelines.json` and `qa_pairs.json` are tracked via Git LFS. Pull them:
 ```bash
 git lfs pull
 ```
 
 If LFS is not available on FarmShare, copy manually:
 ```bash
-scp -r data/processed/ <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/processed/
-scp -r data/generated/ <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/generated/
+scp -r data/processed/ nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/processed/
+scp -r data/generated/ nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/generated/
 ```
 
-### 6. Request an interactive GPU node (for testing)
+### 6. Run tokenizer smoke test (login node, no GPU needed)
 
 ```bash
-srun --partition=gpu --gres=gpu:1 --mem=32G --cpus-per-task=8 --time=4:00:00 --pty bash
+~/miniconda3/bin/conda run --prefix /scratch/users/nallen21/envs/ehr \
+  python scripts/smoke_test_models.py
 ```
 
-For Llama-3-8B fp16, request ≥16 GB VRAM. Mistral-7B is similar.
-If VRAM is limited (8–12 GB), use 4-bit quantization — add `load_in_4bit=True` to `from_pretrained()` in `hf_runner.py` (requires `bitsandbytes` package).
+This verifies tokenizers + chat templates for all 3 HF models (Llama-3.1, Mistral, Phi-3).
 
-### 7. Run evaluation (interactive or as SLURM job)
+### 7. Submit SLURM GPU jobs
 
-**Interactive:**
 ```bash
-conda activate ehr
-python -m Evaluation.run_evaluation \
-  --method all \
-  --model meta-llama/Meta-Llama-3-8B-Instruct \
-  --limit 200
+sbatch scripts/run_hf_eval.sbatch meta-llama/Llama-3.1-8B-Instruct
+sbatch scripts/run_hf_eval.sbatch mistralai/Mistral-7B-Instruct-v0.3
+sbatch scripts/run_hf_eval.sbatch microsoft/Phi-3-mini-4k-instruct
 ```
 
-**SLURM batch script** (`run_llama.sh`):
-```bash
-#!/bin/bash
-#SBATCH --job-name=ehr-llama
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=8
-#SBATCH --time=8:00:00
-#SBATCH --output=logs/llama_%j.out
+Each job runs all 6 retrieval strategies with `--limit 200`. Results go to `data/results/<model-slug>/`.
 
-source activate ehr
-python -m Evaluation.run_evaluation \
-  --method all \
-  --model meta-llama/Meta-Llama-3-8B-Instruct \
-  --limit 200
+**Interactive testing** (request a GPU node first):
+```bash
+srun --partition=normal --qos=gpu --gres=gpu:1 --mem=32G --cpus-per-task=8 --time=4:00:00 --pty bash
+~/miniconda3/bin/conda run --prefix /scratch/users/nallen21/envs/ehr \
+  python -m Evaluation.run_evaluation \
+    --method discharge_only \
+    --model meta-llama/Llama-3.1-8B-Instruct \
+    --limit 5
 ```
 
-Submit: `sbatch run_llama.sh`
-
-### 8. Copy results back
+### 8. Copy results back (if running on a separate FarmShare clone)
 
 ```bash
-scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/results/ data/
+scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/results/ data/
 ```
 
 ---
@@ -365,15 +275,17 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 
 | File | Action | Status |
 |---|---|---|
-| `Evaluation/run_evaluation.py` | Edit — add `_make_runner()` auto-dispatch + `--hf-batch-size` flag | **Done (3/12/26)** |
+| `Evaluation/run_evaluation.py` | Edit — `_make_runner()` routing + `_save_results` model prefix + `--hf-batch-size` | **Done (3/12/26)** |
+| `Evaluation/hf_runner.py` | **Created** — HuggingFace runner; updated for Llama-3.1 + dynamic max_length | **Done (3/12/26)** |
 | `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model tables | Not started |
-| `Evaluation/hf_runner.py` | **Created** — HuggingFace local inference runner, same interface as LLMRunner | **Done (3/12/26)** |
 | `Evaluation/llm_judge.py` | **Create** — post-processing LLM-as-judge script | Not started |
 | `requirements.txt` | Edit — bump `transformers>=4.40`, add `accelerate>=0.27` | **Done (3/12/26)** |
-| `scripts/setup_env.sh` | **Created** — micromamba env setup + HF_HOME redirect to scratch | **Done (3/12/26)** |
-| `scripts/run_hf_eval.sbatch` | **Created** — Slurm GPU batch job (normal partition, gpu QoS, L40S) | **Done (3/12/26)** |
-| `data/results/*.json` | Rename — add model prefix (handled via `--output-dir` per model) | Deferred — use separate output dirs instead |
-| `Progress/MULTI_MODEL_GEN.md` | Update continuously as work progresses | In progress |
+| `scripts/setup_env.sh` | **Created** — conda env setup + cache redirects to scratch (fixed: conda, not micromamba) | **Done (3/12/26)** |
+| `scripts/run_hf_eval.sbatch` | **Created** — SLURM GPU batch job (fixed: conda, not micromamba; all 3 HF models) | **Done (3/12/26)** |
+| `scripts/smoke_test_models.py` | **Created** — tokenizer verification; updated with all 3 HF models | **Done (3/12/26)** |
+| `data/results/*.json` | Rename Phase 1 files to `o4-mini__*.json` | TODO (manual, 1 min) |
+| `Progress/MULTI_MODEL_GEN.md` | Reconciled (3/12/26) — 5-model matrix, fixed discrepancies | **Done (3/12/26)** |
+| `README.md` | Updated model × retrieval matrix to 5 rows + Llama-3.1 in TODO table | **Done (3/12/26)** |
 
 ---
 
@@ -383,8 +295,9 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 |---|---|---|---|---|---|---|
 | o4-mini | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
 | gpt-4o-mini | | | | | | |
-| Llama-3-8B | | | | | | |
+| Llama-3.1-8B | | | | | | |
 | Mistral-7B | | | | | | |
+| Phi-3-mini-4k | | | | | | |
 
 ---
 
@@ -394,20 +307,20 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 |---|---|
 | gpt-4o-mini evaluation (6 strategies × 1,000 Qs) | ~$8 |
 | HuggingFace models (FarmShare GPU, no API cost) | $0 (compute time only) |
-| LLM-as-judge pilot (200 Qs × 24 cells, gpt-4o) | ~$10 |
-| LLM-as-judge full run (1,000 Qs × 24 cells, gpt-4o) | ~$50–100 |
-| **Total estimated** | **~$70–120** |
+| LLM-as-judge pilot (200 Qs × 30 cells, gpt-4o) | ~$12 |
+| LLM-as-judge full run (1,000 Qs × 30 cells, gpt-4o) | ~$60–120 |
+| **Total estimated** | **~$80–140** |
 
 ---
 
 ## Bugs and Issues
 
 ### Conda env at /scratch/users/nallen21/envs/ehr (3/12/26)
-- `micromamba` module not available on this farmshare instance
+- `micromamba` module not available on this FarmShare instance
 - Used existing `~/miniconda3/bin/conda` instead
 - Env created at `/scratch/users/nallen21/envs/ehr` (not in home, avoids quota)
 - Python binary: `/scratch/users/nallen21/envs/ehr/bin/python`
-- All scripts updated to use this path directly
+- **Scripts fixed (3/12/26):** `setup_env.sh` and `run_hf_eval.sbatch` now use `$CONDA_EXE` / `~/miniconda3/bin/conda` instead of micromamba
 
 ### pip and HF caches → scratch (3/12/26)
 - `~/.cache/pip` (3.3GB) moved to `/scratch/users/nallen21/pip_cache_home`
@@ -415,16 +328,19 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 - `HF_HOME=/scratch/users/nallen21/hf_cache` already set
 - Future pip installs and model downloads will not consume home quota
 
-### Tokenizer smoke tests passed (3/12/26)
+### Tokenizer smoke tests passed (3/12/26) — Phi-3 and Mistral only
 - `microsoft/Phi-3-mini-4k-instruct`: vocab=32000, max_length=4096, chat template OK
 - `mistralai/Mistral-7B-Instruct-v0.3`: vocab=32768, chat template OK
 - Mistral reports nonsense `model_max_length` (library artifact) — actual limit is 32k
 - Mistral tokenizer defaults to `padding_side=right`; `HFRunner.__init__` overrides to `left`
+- **Llama-3.1-8B-Instruct not yet tested** — needs smoke test run on FarmShare
 
-### Llama-3 access issue (3/12/26)
-- Requested `meta-llama/Meta-Llama-Guard-2-8B` by mistake (a safety classifier, not QA model)
-- Correct model needed: `meta-llama/Meta-Llama-3-8B-Instruct`
-- Replaced with `microsoft/Phi-3-mini-4k-instruct` for timeline reasons (fully open, no gating)
+### Llama access — RESOLVED (3/12/26)
+- Originally requested `meta-llama/Meta-Llama-Guard-2-8B` by mistake (safety classifier, not QA model)
+- Phi-3-mini-4k was added as a replacement
+- **HuggingFace approved access to `meta-llama/Llama-3.1-8B`** (covers all variants including Instruct)
+- Llama-3.1-8B-Instruct is now back in the matrix as model #3 (Phi-3 remains as model #5)
+- `hf_runner.py`, `smoke_test_models.py`, `run_hf_eval.sbatch` all updated with new model ID
 
 ### Farmshare home directory quota exceeded (3/12/26)
 - **Symptom:** `EDQUOT: Disk quota exceeded` when trying to write any file
@@ -433,6 +349,16 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 - **Permanent fix:** `scripts/setup_env.sh` sets `HF_HOME=/scratch/users/.../hf_cache` so future model downloads go to scratch
 - **Note:** The symlink from `~/.cache/huggingface` → scratch failed (also quota blocked), so `HF_HOME` env var is used instead
 
+### _save_results overwrite bug — FIXED (3/12/26)
+- `_save_results()` previously wrote `{method}.json` — different models would overwrite each other
+- Now writes `{model_slug}__{method}.json` (e.g., `o4-mini__bm25_k5.json`)
+- Existing Phase 1 files (`bm25_k5.json`, etc.) still need manual renaming — see Step 0
+
+### hf_runner.py hardcoded max_length — FIXED (3/12/26)
+- Previously hardcoded `max_length=4096` for tokenizer truncation, which is correct for Phi-3 but wrong for Llama-3.1 (128k) and Mistral (32k)
+- Now reads `model.config.max_position_embeddings` and reserves space for `max_new_tokens`
+- Logs a warning when truncation occurs
+
 ---
 
 ## For the Next Agent
@@ -440,18 +366,22 @@ scp -r <sunetid>@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/resul
 **Start here:**
 
 1. Read this file top-to-bottom
-2. Read `Evaluation/llm_runner.py` and `Evaluation/run_evaluation.py` to understand the existing runner interface — `hf_runner.py` must match it exactly
-3. Execute Step 0 (rename files) before any code changes
-4. Implement Steps 1–4 in order (they have dependencies)
-5. Run gpt-4o-mini as a smoke test before touching FarmShare
+2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)
+3. Run `smoke_test_models.py` on FarmShare to verify Llama-3.1-8B-Instruct tokenizer
+4. Run gpt-4o-mini locally as a pipeline smoke test
+5. Submit SLURM jobs for the 3 HF models
+6. Implement Step 2 (analysis.py multi-model grouping) once results exist
+7. Build llm_judge.py (Step 5/10)
 
 **Key invariants to preserve:**
-- Cache key format: `SHA256(json({model, messages}))` — must be identical in `hf_runner.py`
+- Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
 - Result dict shape: `{answer, prompt_tokens, completion_tokens, cached}` — `run_evaluation.py` expects exactly these keys
 - All 6 strategies use the same `token_budget=4096` for fair comparison across models
 - `data/results/cache/` is gitignored and regenerable — never commit it
+- Result filenames: `{model_slug}__{method}.json` — e.g. `o4-mini__bm25_k5.json`
 
 **Known issues to watch for:**
-- Llama-3-8B has an 8k context window. At `token_budget=4096`, the full-context strategy may exceed this when combined with the system prompt overhead. `hf_runner.py` should truncate inputs to `model.config.max_position_embeddings` and log a warning when truncation occurs.
+- Llama-3.1-8B-Instruct has 128k context, but `hf_runner.py` truncates input to `max_position_embeddings - max_new_tokens`. At `token_budget=4096`, this is well within limits.
 - Mistral-7B-Instruct-v0.3 uses a legacy `[INST]` chat template. `apply_chat_template()` handles this automatically but verify the output format looks correct on a single example before running at scale.
-- HF model weights are large (Llama-3-8B ≈ 16 GB fp16). First load will download from HuggingFace — ensure `HF_TOKEN` is set and the Llama-3 license has been accepted at huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct.
+- HF model weights are large (Llama-3.1-8B ≈ 16 GB fp16, Mistral-7B ≈ 14 GB fp16). First load downloads from HuggingFace — ensure `HF_TOKEN` is set and Llama license is accepted.
+- FarmShare L40S GPUs have 48 GB VRAM — all models fit in fp16 without quantization.

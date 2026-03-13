@@ -191,11 +191,12 @@ async def _run_strategy(
 
 # ── Save results ──────────────────────────────────────────────────────────────
 
-def _save_results(results: list[dict], method: str, output_dir: Path) -> Path:
+def _save_results(results: list[dict], method: str, output_dir: Path, model: str = "unknown") -> Path:
     """Write results to a JSON file, stripping the full prompt to save space."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    tag = results[0]["method"] if results else method
-    path = output_dir / f"{tag}.json"
+    tag = results[0].get("method", method) if results else method
+    model_slug = model.replace("/", "--")
+    path = output_dir / f"{model_slug}__{tag}.json"
 
     slim = []
     for r in results:
@@ -258,7 +259,7 @@ async def run(args: argparse.Namespace) -> None:
             token_budget=args.token_budget,
             **strategy_kwargs.get(method, {}),
         )
-        _save_results(results, method, Path(args.output_dir))
+        _save_results(results, method, Path(args.output_dir), model=args.model)
 
     stats = runner.stats
     log.info(

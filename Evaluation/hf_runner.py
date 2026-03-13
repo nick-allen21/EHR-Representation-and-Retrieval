@@ -10,10 +10,11 @@ generate_batch() checks the cache for all items first, then processes all
 uncached items in batches of `batch_size` through the model.  Results are
 cached after each batch so partial runs are recoverable.
 
-Supported models (tested)
---------------------------
-- meta-llama/Meta-Llama-3-8B-Instruct    (gated — requires HF_TOKEN)
+Supported models (tested tokenizers; GPU runs pending)
+------------------------------------------------------
+- meta-llama/Llama-3.1-8B-Instruct       (gated — requires HF_TOKEN)
 - mistralai/Mistral-7B-Instruct-v0.3     (open)
+- microsoft/Phi-3-mini-4k-instruct       (open, 4k context)
 """
 
 from __future__ import annotations
@@ -99,7 +100,14 @@ class HFRunner:
             token=hf_token,
         )
         self._hf_model.eval()
-        log.info("Model loaded: %s", model_id)
+
+        self._max_model_len = getattr(
+            self._hf_model.config, "max_position_embeddings", 4096
+        )
+        log.info(
+            "Model loaded: %s (max_position_embeddings=%d)",
+            model_id, self._max_model_len,
+        )
 
     # ── Core batch inference (synchronous) ────────────────────────────────────
 
@@ -121,13 +129,20 @@ class HFRunner:
             for msgs in messages_batch
         ]
 
+        max_input = self._max_model_len - max_new_tokens
         inputs = self.tokenizer(
             texts,
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=4096,
+            max_length=max_input,
         ).to(self._hf_model.device)
+
+        if inputs["input_ids"].shape[1] >= max_input:
+            log.warning(
+                "Input truncated to %d tokens (model max=%d, reserved %d for generation)",
+                max_input, self._max_model_len, max_new_tokens,
+            )
 
         input_len = inputs["input_ids"].shape[1]
 
