@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 _RESULTS_DIR = Path("data/results")
 _PLOTS_DIR = Path("data/results/plots")
 
-_SKIP_FILES = {"cache"}
+_SKIP_FILES = {"cache", "summary"}
 
 
 # ── Loading ───────────────────────────────────────────────────────────────────

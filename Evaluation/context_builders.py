@@ -263,7 +263,8 @@ def build_learned(
         )
 
     note_text = record.get("note_text", record.get("discharge_summary", ""))
-    selected_chunks = selector.select(question, note_text, K=k)
+    dischtime = (record.get("admission") or {}).get("dischtime")
+    selected_chunks = selector.select(question, note_text, K=k, dischtime=dischtime)
     if not selected_chunks:
         return build_discharge_only(record, question, token_budget=token_budget)
 

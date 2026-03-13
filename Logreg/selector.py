@@ -42,6 +42,9 @@ class ChunkSelector:
         model_dir = Path(model_dir)
         with open(model_dir / "model.pkl", "rb") as f:
             model = pickle.load(f)
+        # sklearn ≥1.7 removed multi_class; patch for cross-version compatibility
+        if not hasattr(model, "multi_class"):
+            model.multi_class = "ovr"
         extractor = FeatureExtractor.load(model_dir / "feature_extractor.pkl")
         return cls(model, extractor, strategy=strategy)
 
@@ -75,8 +78,13 @@ class ChunkSelector:
         question: str,
         note_text: str,
         K: int = 5,
+        dischtime: str | None = None,
     ) -> list[dict]:
         """Select the top-K most useful chunks from a discharge summary.
+
+        Args:
+            dischtime: ISO datetime string of discharge (e.g. "2180-06-27 14:30:00").
+                       Enables temporal proximity features. Pass None to omit.
 
         Returns a list of chunk dicts sorted by score (descending), each
         with an additional 'score' key containing the predicted probability.
@@ -84,6 +92,10 @@ class ChunkSelector:
         chunks = chunk_note(note_text, strategy=self.strategy)
         if not chunks:
             return []
+
+        if dischtime is not None:
+            for chunk in chunks:
+                chunk["_dischtime"] = dischtime
 
         scores  = self.score_chunks(question, chunks)
         top_idx = np.argsort(scores)[-K:][::-1]
