@@ -13,14 +13,15 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 
 ## Datasets
 
-All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). Five datasets are relevant to this project:
+All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). Six datasets are relevant to this project:
 
 | Dataset | Location | Size | Role | Status |
 |---|---|---|---|---|
 | **Patient timelines** | `data/processed/patient_timelines.json` | 200 patients | EHR input to all pipelines (discharge summaries + structured events) | ✅ In repo (Git LFS) |
+| **Patient timelines (verified)** | `data/processed/patient_timelines_verified.json` | 70 patients | Timelines for the physician-verified patient set (zero overlap with dev set) | ✅ In repo |
 | **gpt-4o QA pairs** | `data/generated/qa_pairs.json` | 198 patients, 990 pairs | Dev set for training logreg + downstream LLM evaluation | ✅ In repo (Git LFS) |
 | **EHR-DS-QA (full)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv` | 21k patients, ~157k pairs | Alternative training supervision (Llama-2 generated, no difficulty/source metadata). 198/198 of our patients covered (1,612 pairs). | ✅ Shipped in repo |
-| **EHR-DS-QA (verified)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json` | 70 patients, 478 correct pairs | Physician-verified QA — partial holdout option (questions are relatively simple) | ✅ Shipped in repo |
+| **EHR-DS-QA (verified)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json` | 70 patients, 478 correct pairs | Physician-verified QA — held-out test set with human-validated ground truth (28 rejected by physician review) | ✅ Shipped in repo |
 | **Gold standard QA** | `data/gold/` *(not yet added)* | ~926 pairs | Primary held-out test set — physician-authored, complex clinical questions. **Do not use for training or dev evaluation.** | ⬜ TODO: download and add |
 
 ### Notes on each dataset
@@ -91,7 +92,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | — MLP ranker on frozen embeddings | | |
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
 | **Full E2E test (200 patients, 5 models × 6 strategies)** | Nick | **Done (3/13/26)** — see `Progress/E2E_TEST.md` |
-| **Verified QA evaluation (70 physician-reviewed patients)** | Nick | **In progress (3/13/26)** — code changes done, need BigQuery pipeline run; see `Progress/E2E_TEST.md` Phase 2 |
+| **Verified QA evaluation (70 physician-reviewed patients)** | Nick | **In progress (3/13/26)** — data ready (`patient_timelines_verified.json`), evaluation runs pending on FarmShare; see `Progress/E2E_TEST.md` Phase 2 |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
 | — LLM-as-judge prompt design and execution | Nick | Done — rankings in `judge_rankings.json` |
@@ -463,7 +464,12 @@ Evaluation/                  Phase 1b + Phase 2 — downstream LLM comparison (N
 Progress/                    per-TODO agent progress logs
 ├── CORE_COMPARISON_AGENT.md Phase 1b — core comparison (Nick)
 ├── MULTI_MODEL_GEN.md       Phase 2 — multi-model generalization (Nick)
+├── E2E_TEST.md              E2E test + verified QA eval progress
 └── FEATURE_ENRICHMENT.md    Feature enrichment + dual QA source (Niki)
+
+scripts/                     FarmShare setup, SLURM batch jobs
+├── run_hf_eval.sbatch       SLURM: HF model eval on 200-patient dev set
+└── run_verified_eval.sbatch SLURM: HF model eval on 70-patient verified set
 ```
 
 ---
