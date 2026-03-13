@@ -123,22 +123,48 @@ Full implementation matching `LLMRunner` interface. Key details:
 
 ---
 
-### Step 5: Build `Evaluation/llm_judge.py` — **TODO**
+### Step 5: Build `Evaluation/llm_judge.py` — **DONE (3/13/26)**
 
 Post-processing script that runs LLM-as-judge on existing result files. Runs independently of `run_evaluation.py`.
 
-Clinical correctness rubric (1–5 scale):
+Two phases:
+1. **Score** — calls judge LLM on each (question, predicted_answer, gold_answer) triple, writes `judge_score` (1–5) back into result files in-place. Idempotent; re-runs cost $0 (cached).
+2. **Rank** — cross-references judge scores across strategy files by question identity `(subject_id, hadm_id, question)`, computes win counts (fractional for ties), mean scores, score distribution (1–5), and per-difficulty breakdown.
+
+Clinical correctness rubric (1–5 scale, in `scoring.py`):
 ```
-5 — Completely correct and complete. All relevant clinical facts present.
-4 — Mostly correct. Minor omissions or imprecision that would not affect clinical decisions.
-3 — Partially correct. Key facts present but important details missing or imprecise.
-2 — Mostly incorrect. Answer is related to the question but contains significant errors.
-1 — Incorrect or irrelevant. Answer does not address the question or contains harmful errors.
+5 — Fully correct, includes all key facts from the reference answer.
+4 — Mostly correct, minor omission or imprecision.
+3 — Partially correct, captures some key facts but misses important ones.
+2 — Mostly incorrect, only marginally related to the reference answer.
+1 — Completely wrong or empty.
 ```
 
-CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o --limit 200`
+**Default targets:** `full_context`, `semantic_rag_k5`, `learned_k5` (the three most interesting strategies for comparison). Override with `--files`.
 
-**Cost note:** gpt-4o judge on 5 models × 6 strategies × 1,000 Qs = 30,000 calls ≈ $60–120. Sample 200 Qs per cell first to validate the rubric.
+**Judge model:** `gpt-4o-mini` by default (~$0.02 for 600 calls at 200/file). Switch to `--judge-model gpt-4o` for final results.
+
+**Current status:** 200 rows scored in each of the 3 default target files (full_context, semantic_rag_k5, learned_k5). All cached in `data/results/cache/`.
+
+CLI:
+```bash
+# Default pilot (gpt-4o-mini, 200 rows/file, 3 strategies)
+python -m Evaluation.llm_judge
+
+# Rankings only from existing scores (free)
+python -m Evaluation.llm_judge --rank-only
+
+# Specific files
+python -m Evaluation.llm_judge \
+    --files data/results/o4-mini__full_context.json \
+            data/results/o4-mini__semantic_rag_k5.json \
+            data/results/o4-mini__learned_k5.json
+
+# Full run with gpt-4o for final results
+python -m Evaluation.llm_judge --judge-model gpt-4o --limit 1000
+```
+
+**Cost note:** gpt-4o-mini judge on 3 strategies × 200 Qs ≈ $0.02. Full run (3 × 1,000 Qs) ≈ $0.10 with gpt-4o-mini, ~$2 with gpt-4o. Extend to all 6 strategies × 5 models once HF runs complete.
 
 ---
 
@@ -155,8 +181,9 @@ Step 6:  Run smoke_test_models.py on FarmShare (verify Llama tokenizer)   ← NE
 Step 7:  Run Llama-3.1-8B on FarmShare (compute only, fills row 3)       ← NEXT
 Step 8:  Run Mistral-7B on FarmShare (compute only, fills row 4)         ← NEXT
 Step 9:  Run Phi-3-mini-4k on FarmShare (compute only, fills row 5)      ← NEXT
-Step 10: Create llm_judge.py + design prompt (1 hr)                       ← TODO
-Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO
+Step 10: Create llm_judge.py + design prompt (1 hr)                       ✓ DONE (3/13/26)
+Step 11: Run LLM-as-judge pilot on 3 strategies × 200 rows               ✓ DONE (3/13/26) — scores in result files
+Step 11b: Run LLM-as-judge full run on all 6 strategies × all models     ← TODO (after HF runs complete)
 Step 12: Update analysis.py + README.md matrix with final numbers         ← TODO
 ```
 
@@ -278,7 +305,7 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 | `Evaluation/run_evaluation.py` | Edit — `_make_runner()` routing + `_save_results` model prefix + `--hf-batch-size` | **Done (3/12/26)** |
 | `Evaluation/hf_runner.py` | **Created** — HuggingFace runner; updated for Llama-3.1 + dynamic max_length | **Done (3/12/26)** |
 | `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model tables | Not started |
-| `Evaluation/llm_judge.py` | **Create** — post-processing LLM-as-judge script | Not started |
+| `Evaluation/llm_judge.py` | **Created** — LLM-as-judge scoring + cross-strategy ranking; gpt-4o-mini default; idempotent; `--rank-only` mode | **Done (3/13/26)** |
 | `requirements.txt` | Edit — bump `transformers>=4.40`, add `accelerate>=0.27` | **Done (3/12/26)** |
 | `scripts/setup_env.sh` | **Created** — conda env setup + cache redirects to scratch (fixed: conda, not micromamba) | **Done (3/12/26)** |
 | `scripts/run_hf_eval.sbatch` | **Created** — SLURM GPU batch job (fixed: conda, not micromamba; all 3 HF models) | **Done (3/12/26)** |
@@ -366,12 +393,19 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)
+2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)  ← still needed if not done
 3. Run `smoke_test_models.py` on FarmShare to verify Llama-3.1-8B-Instruct tokenizer
 4. Run gpt-4o-mini locally as a pipeline smoke test
 5. Submit SLURM jobs for the 3 HF models
 6. Implement Step 2 (analysis.py multi-model grouping) once results exist
-7. Build llm_judge.py (Step 5/10)
+7. ~~Build llm_judge.py~~ — **Done (3/13/26)**. See `Evaluation/llm_judge.py`.
+8. Once HF runs complete: run `python -m Evaluation.llm_judge --judge-model gpt-4o-mini` on all model result files to fill judge scores for the full matrix.
+
+**LLM-as-judge current state (3/13/26):**
+- `Evaluation/llm_judge.py` created with two-phase score+rank flow
+- Pilot scores written: 200 rows × 3 strategies (full_context, semantic_rag_k5, learned_k5)
+- Judge model: gpt-4o-mini (switch to gpt-4o for final paper results)
+- Run `python -m Evaluation.llm_judge --rank-only` to see current rankings instantly (free)
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
