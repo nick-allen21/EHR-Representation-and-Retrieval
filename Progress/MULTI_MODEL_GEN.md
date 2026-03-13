@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** All 5 models complete (30/30 cells); LLM-as-judge code ready, not yet run
+**Status:** All 5 models complete (30/30 cells); LLM-as-judge run on all 30 cells (3/13/26)
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -469,16 +469,16 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-2. All 30 matrix cells are filled (5 models × 6 strategies). LLM-as-judge pilot is done.
-3. To extend judge scoring: `python -m Evaluation.llm_judge --limit 1000` (all rows) or add more model files via `--files`
-4. To view current rankings instantly (free): `python -m Evaluation.llm_judge --rank-only`
-5. Update matrices with LLM-judge scores (new column) once full scoring is complete
+2. All 30 matrix cells filled (5 models × 6 strategies). Full end-to-end test completed 3/13/26.
+3. LLM-as-judge: 50–200 rows scored per file across all 30 cells. Rankings in `data/results/judge_rankings.json`
+4. To extend: `python -m Evaluation.llm_judge --files data/results/*__*.json --limit 1000`
+5. To view rankings (free): `python -m Evaluation.llm_judge --files data/results/*__*.json --rank-only`
 
 **LLM-as-judge current state (3/13/26):**
-- `Evaluation/llm_judge.py` created with two-phase score+rank flow
-- Pilot scores written: 200 rows × 3 o4-mini strategies (full_context, semantic_rag_k5, learned_k5)
-- Judge model: gpt-4o-mini used for pilot. Default is gpt-4o for production runs.
-- Rankings and scores saved to `data/results/judge_rankings.json` and `data/results/summary.json`
+- All 30 model×strategy files scored (gpt-4o-mini judge)
+- Top strategies by mean score: o4-mini full_context (3.28), o4-mini semantic_rag (3.56), o4-mini learned (3.46)
+- Phi-3-mini-4k scores lowest (1.4–2.9) due to 4k context truncation
+- `_save_to_summary_json` warns for multi-model (summary.json aggregates by strategy, not model×strategy)
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
