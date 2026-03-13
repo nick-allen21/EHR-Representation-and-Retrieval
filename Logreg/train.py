@@ -76,6 +76,9 @@ def build_dataset(
         note_chunks = chunk_note(record["note_text"], strategy=strategy)
         if not note_chunks:
             continue
+        dischtime = (record.get("admission") or {}).get("dischtime")
+        for chunk in note_chunks:
+            chunk["_dischtime"] = dischtime
 
         for qa in record["qa_pairs"]:
             question = qa.get("question", "").strip()

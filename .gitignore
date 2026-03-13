@@ -39,3 +39,6 @@ env/
 !data/processed/patient_timelines.json
 !data/generated/qa_pairs.json
 !data/results/*.json
+
+# CLAUDE.md
+CLAUDE.md
