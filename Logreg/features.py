@@ -106,6 +106,48 @@ _ABNORMAL_LAB_RE = re.compile(
 # ISO timestamp embedded by event serializers: "2180-06-26 22:45:00" or "2180-06-26"
 _TIMESTAMP_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)\b")
 
+# ── Group D helpers ───────────────────────────────────────────────────────────
+
+# Stopwords to exclude from content_word_overlap
+_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "what", "which", "who",
+    "whom", "how", "when", "where", "why", "this", "that", "these",
+    "those", "i", "we", "you", "he", "she", "they", "it", "its",
+    "their", "our", "your", "his", "her", "at", "by", "for", "in",
+    "on", "of", "to", "up", "or", "and", "not", "with", "from",
+    "as", "about", "any", "all", "also", "are", "than", "if",
+    "patient", "patients", "s", "did", "the", "during", "after",
+    "before", "per", "mg", "ml", "the", "discharge", "admission",
+})
+
+# Numeric token: contains at least one digit
+_NUMERIC_RE = re.compile(r"\b[\d][\w./]*\b")
+
+# Section header patterns for MIMIC-IV discharge summary (checked against chunk["section_header"])
+_DISCHARGE_MEDS_RE  = re.compile(r"discharge\s+med",     re.I)
+_ADMISSION_MEDS_RE  = re.compile(r"med.*\badmission\b|\badmission\b.*med", re.I)
+_DISCHARGE_LABS_RE  = re.compile(r"(discharge|pertinent)\s+(lab|result)", re.I)
+_ADMISSION_LABS_RE  = re.compile(r"lab.*\badmission\b|\badmission\b.*lab|labs\s+on\s+admission", re.I)
+
+
+def _content_word_overlap(question: str, chunk_text: str) -> float:
+    """Fraction of non-stopword question tokens found in chunk text."""
+    q_tokens = set(re.findall(r"[a-z0-9]+", question.lower())) - _STOPWORDS
+    if not q_tokens:
+        return 0.0
+    c_tokens = set(re.findall(r"[a-z0-9]+", chunk_text.lower()))
+    return len(q_tokens & c_tokens) / len(q_tokens)
+
+
+def _numeric_density(text: str) -> float:
+    """Fraction of whitespace-tokens that are numeric."""
+    tokens = text.split()
+    if not tokens:
+        return 0.0
+    return sum(1 for t in tokens if _NUMERIC_RE.match(t)) / len(tokens)
+
 
 def _count_temporal_markers(text: str) -> int:
     return len(_TEMPORAL_MARKER_RE.findall(text))
@@ -351,6 +393,20 @@ class FeatureExtractor:
             has_temporal_marker * qt_onehot[:, _qt["diagnosis"]],
         ])
 
+        # ── Group D: precision section header + content features ──────────────
+        content_word_overlap = np.array([
+            _content_word_overlap(q, c["text"])
+            for q, c in zip(questions, chunks)
+        ])
+        numeric_density = np.array([
+            _numeric_density(c["text"]) for c in chunks
+        ])
+        hdr = [c.get("section_header", "") for c in chunks]
+        has_discharge_meds_hdr = np.array([float(bool(_DISCHARGE_MEDS_RE.search(h))) for h in hdr])
+        has_admission_meds_hdr = np.array([float(bool(_ADMISSION_MEDS_RE.search(h))) for h in hdr])
+        has_discharge_labs_hdr = np.array([float(bool(_DISCHARGE_LABS_RE.search(h))) for h in hdr])
+        has_admission_labs_hdr = np.array([float(bool(_ADMISSION_LABS_RE.search(h))) for h in hdr])
+
         # ── Assemble ──────────────────────────────────────────────────────────
         X = np.column_stack([
             embed_sim,
@@ -370,6 +426,12 @@ class FeatureExtractor:
             qt_onehot,
             interactions,
             new_interactions,
+            content_word_overlap,
+            numeric_density,
+            has_discharge_meds_hdr,
+            has_admission_meds_hdr,
+            has_discharge_labs_hdr,
+            has_admission_labs_hdr,
         ])
         return X.astype(np.float32)
 
@@ -390,6 +452,14 @@ class FeatureExtractor:
             "int_within_24h_x_labs",
             "int_temporal_marker_x_labs",
             "int_temporal_marker_x_diagnosis",
+        ]
+        names += [
+            "content_word_overlap",
+            "numeric_density",
+            "has_discharge_meds_hdr",
+            "has_admission_meds_hdr",
+            "has_discharge_labs_hdr",
+            "has_admission_labs_hdr",
         ]
         return names
 

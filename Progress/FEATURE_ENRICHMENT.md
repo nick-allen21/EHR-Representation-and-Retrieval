@@ -250,3 +250,128 @@ conda run -n ehr python -m Evaluation.run_evaluation \
 ```
 
 Results: `data/results/ehr_ds_qa/learned_k5.json` (1,000 QA pairs scored)
+
+---
+
+## Phase 3: Bug Fixes + Group D Features + Entity Boost Attempt (2026-03-13)
+
+### Bugs found and fixed
+
+#### Bug 1: `admission` dict stripped by `data_loader.merge()` → Group B always null
+- **Symptom:** Group B temporal features were always constant `(0.5, 0.0, 0.0, 1.0)` at training time. L1 correctly zeroed them. Model appeared to have 160 features but Group B contributed nothing.
+- **Root cause:** `data_loader.merge()` returned only `{subject_id, hadm_id, note_text, qa_pairs}` — the `admission` dict was silently dropped.
+- **Fix:** Added `"admission": t.get("admission", {})` to the merged record in `Logreg/data_loader.py`.
+
+#### Bug 2: ISO 8601 timestamp parse failure in `features.py`
+- **Symptom:** Temporal proximity features returned default values even after Bug 1 was fixed.
+- **Root cause:** `dischtime` from the timeline is `"2180-06-27T18:49:00"` (ISO 8601 with `T` separator), but `strptime` expected `"%Y-%m-%d %H:%M:%S"` (space separator).
+- **Fix:** Added `.replace("T", " ")` before parsing in `Logreg/features.py`.
+
+#### Bug 3: `logreg_generated` model trained without embeddings
+- **Symptom:** `logreg_generated` model significantly underperformed despite retraining.
+- **Root cause:** Model was accidentally trained with `--no-embeddings` flag in a prior session.
+- **Fix:** Retrained `logreg_generated` model with default settings (embeddings enabled).
+
+#### Bug 4: sklearn version mismatch (1.8.0 trained, 1.6.1 running)
+- **Symptom:** `AttributeError: 'LogisticRegression' object has no attribute 'multi_class'` when loading the model in `selector.py`.
+- **Root cause:** Model pickled under sklearn 1.8.0, but conda env had 1.6.1. Newer sklearn removed the `multi_class` attribute.
+- **Fix:** Patched in `Logreg/selector.py` after load: `if not hasattr(model, "multi_class"): model.multi_class = "ovr"`.
+
+#### Bug 5: `llm_runner.py` semaphore held during rate-limit sleep
+- **Symptom:** When hitting OpenAI rate limits, all concurrent tasks stalled. Nothing made progress.
+- **Root cause:** `asyncio.sleep(wait)` was called inside `async with self.semaphore:`, blocking all slots.
+- **Fix:** Moved sleep OUTSIDE the semaphore block in `Evaluation/llm_runner.py`.
+
+---
+
+### Group D features implemented
+
+Six new precision features added to `Logreg/features.py` (146 → 152 dims, actual 160+ including section one-hots):
+
+| Feature | Description | Weight (approx) |
+|---|---|---|
+| `content_word_overlap` | Lexical overlap using only non-stopword question tokens | ~0 (zeroed by L1, correlated with `lexical_overlap`) |
+| `numeric_density` | Fraction of tokens that are numeric | +0.22 (active) |
+| `has_discharge_meds_hdr` | Chunk header matches "Discharge Medications" | ~0 |
+| `has_admission_meds_hdr` | Chunk header matches "Medications on Admission" | **+1.19** (strongest new feature) |
+| `has_discharge_labs_hdr` | Chunk header matches "Discharge Labs"/"PERTINENT RESULTS" | ~0 |
+| `has_admission_labs_hdr` | Chunk header matches "Labs on Admission" | ~0 |
+
+Helper constants added: `_STOPWORDS` (~50 common words), `_NUMERIC_RE`, `_DISCHARGE_MEDS_RE`, `_ADMISSION_MEDS_RE`, `_DISCHARGE_LABS_RE`, `_ADMISSION_LABS_RE`.
+
+---
+
+### Entity-boosted weak supervision: attempted and reverted
+
+**Idea:** Label positive any chunk that (a) is in a structured section (labs/vitals/medications/results), (b) shares a clinical entity with the question, AND (c) contains a numeric measurement — even if token F1 with the gold answer is below threshold.
+
+**Implementation:**
+- `Logreg/labeler.py`: Added `_CLINICAL_ENTITIES` vocab (~35 terms), `_ENTITY_BOOST_SECTIONS`, `_HAS_NUMERIC_RE`, and entity-boost logic inside `label_chunks()` (optional via `question=` arg).
+- `Logreg/train.py`: Temporarily wired in `question` arg to `label_chunks()`.
+
+**Why it failed:**
+- `note_text` in training records includes the full serialized event timeline (labs, vitals, medications serialized as text). Every patient has 20+ sodium measurements, all spread across many chunks.
+- For a question like "What was the patient's sodium level?", entity boost labeled every chunk containing "sodium" + a number as positive.
+- This created contradictory training signal: `tfidf_sim` flipped to weight **-11** (the model learned to *avoid* chunks that lexically matched the question).
+- With tight sections (`_ENTITY_BOOST_SECTIONS = {"labs", "vitals", "medications", "results"}`), positive rate was 9.8% (up from 7.4%) — still too noisy.
+
+**Conclusion:** Entity boost only works if discharge note sections and event timeline are chunked separately, with exact answer-number matching (not just entity co-occurrence). Infrastructure change needed: separate chunking pipelines for discharge text vs. event chunks.
+
+**Current state:** Entity boost code is present in `labeler.py` but `train.py` does NOT pass `question=` to `label_chunks()`. The feature is dormant.
+
+---
+
+### Final model results (after all fixes, Group D features, GPT-4o trained model)
+
+Evaluated on 1000 QA pairs (200-patient limit), o4-mini:
+
+| Metric | Value |
+|---|---|
+| Recall@1 | 0.392 |
+| Recall@3 | 0.773 |
+| Recall@5 | 0.875 |
+| Recall@10 | 0.957 |
+| Token F1 | 0.405 |
+| ROUGE-L | ~0.331 |
+
+**Note:** Token F1 is insensitive to small retrieval improvements. The Recall@K increases (R@3: 0.58→0.77 vs. earlier broken model) reflect the bug fixes (especially Group B now active). Group D features contribute marginally on top.
+
+---
+
+### For the Next Agent
+
+**What's complete:**
+- All three root cause bugs fixed (admission dict, ISO timestamp, no-embeddings)
+- Group A/B/C/D features all implemented and active
+- sklearn version compatibility patch in `selector.py`
+- `llm_runner.py` semaphore fix
+- Entity boost attempted, analyzed, and cleanly reverted
+- Both models retrained: `data/models/logreg_generated/` and `data/models/logreg_ehr_ds_qa/`
+
+**What's NOT done (future work):**
+- Entity boost could work with separate discharge/events chunking + exact number matching
+- `content_word_overlap` is zeroed by L1 (redundant with `lexical_overlap`) — could try removing it to simplify the feature vector
+- Ablation study per feature group (Group A/B/C/D individually) to measure isolated contribution
+- LLM-as-judge scoring to detect whether *semantically correct* evidence is retrieved even when token F1 is flat
+
+**Key CLI commands:**
+```bash
+# Retrain GPT-4o model (current best)
+conda run -n ehr python -m Logreg.run train --qa-source generated
+
+# Retrain both and compare Recall@K
+conda run -n ehr python -m Logreg.run train --qa-source both
+
+# Downstream eval (GPT-4o trained model, 200 patients)
+conda run -n ehr python -m Evaluation.run_evaluation --method learned --limit 200 --concurrency 2
+
+# Downstream eval (EHR-DS-QA trained model)
+conda run -n ehr python -m Evaluation.run_evaluation --method learned --model-dir data/models/logreg_ehr_ds_qa --output-dir data/results/ehr_ds_qa --limit 200 --concurrency 2
+```
+
+**Key files to understand:**
+- `Logreg/features.py` — full feature extraction (Groups A/B/C/D)
+- `Logreg/data_loader.py` — merge() bug fix (admission dict)
+- `Logreg/labeler.py` — entity boost code (dormant, future work)
+- `Logreg/selector.py` — sklearn compatibility patch
+- `Evaluation/llm_runner.py` — semaphore fix
