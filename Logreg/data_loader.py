@@ -326,6 +326,7 @@ def merge(
             "hadm_id":    int(t["hadm_id"]),
             "note_text":  note_text,
             "qa_pairs":   qa_pairs,
+            "admission":  t.get("admission", {}),
         })
 
     print(

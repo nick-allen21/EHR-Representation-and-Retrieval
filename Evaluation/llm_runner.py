@@ -97,8 +97,11 @@ class LLMRunner:
             create_kwargs["max_tokens"] = max_tokens
             create_kwargs["temperature"] = temperature
 
-        async with self.semaphore:
-            for attempt in range(1, _MAX_RETRIES + 1):
+        wait = 0.0
+        for attempt in range(1, _MAX_RETRIES + 1):
+            if wait > 0:
+                await asyncio.sleep(wait)  # sleep OUTSIDE semaphore so other tasks can proceed
+            async with self.semaphore:
                 try:
                     resp = await self.client.chat.completions.create(
                         **create_kwargs,
@@ -122,7 +125,6 @@ class LLMRunner:
                         "Rate limited, retry in %.1fs (attempt %d/%d)",
                         wait, attempt, _MAX_RETRIES,
                     )
-                    await asyncio.sleep(wait)
 
                 except APIStatusError as exc:
                     if exc.status_code >= 500:
@@ -131,7 +133,6 @@ class LLMRunner:
                             "Server error %d, retry in %.1fs (attempt %d/%d)",
                             exc.status_code, wait, attempt, _MAX_RETRIES,
                         )
-                        await asyncio.sleep(wait)
                     else:
                         log.error("API error %d: %s", exc.status_code, exc.message)
                         self._stats["errors"] += 1

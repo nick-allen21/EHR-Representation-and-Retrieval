@@ -33,7 +33,15 @@ Feature vector layout (F dimensions total):
   [144]     int_temporal_marker_x_labs
   [145]     int_temporal_marker_x_diagnosis
 
-Total: 5 + 4 + 4 + 17 + 6 + 102 + 8 = 146 features
+  Group D — precision section header + content features (6 dims):
+  [146]     content_word_overlap     — lexical_overlap over non-stopword question tokens only
+  [147]     numeric_density          — fraction of tokens that are numeric (digits/units)
+  [148]     has_discharge_meds_hdr   — chunk header is "Discharge Medications"
+  [149]     has_admission_meds_hdr   — chunk header is "Medications on Admission"
+  [150]     has_discharge_labs_hdr   — chunk header is "Discharge Labs" / "LABS ON DISCHARGE"
+  [151]     has_admission_labs_hdr   — chunk header is "Labs on Admission" / "LABS ON ADMISSION"
+
+Total: 5 + 4 + 4 + 17 + 6 + 102 + 8 + 6 = 152 features
 
 Temporal metadata is passed via chunk["_dischtime"] (an ISO datetime string,
 e.g. "2180-06-27 14:30:00"). Set by build_dataset() and selector.select().
@@ -122,7 +130,7 @@ def _extract_temporal_meta(
         ts_str = m.group(1)
         fmt = "%Y-%m-%d %H:%M:%S" if len(ts_str) > 10 else "%Y-%m-%d"
         chunk_dt = datetime.strptime(ts_str, fmt)
-        disch_dt = datetime.strptime(dischtime[:19], "%Y-%m-%d %H:%M:%S")
+        disch_dt = datetime.strptime(dischtime[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
         days_before = max(0.0, (disch_dt - chunk_dt).total_seconds() / 86400.0)
         return (
             min(days_before / 30.0, 1.0),   # normalized, 30-day window

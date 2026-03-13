@@ -42,6 +42,9 @@ class ChunkSelector:
         model_dir = Path(model_dir)
         with open(model_dir / "model.pkl", "rb") as f:
             model = pickle.load(f)
+        # sklearn ≥1.7 removed multi_class; patch for cross-version compatibility
+        if not hasattr(model, "multi_class"):
+            model.multi_class = "ovr"
         extractor = FeatureExtractor.load(model_dir / "feature_extractor.pkl")
         return cls(model, extractor, strategy=strategy)
 
