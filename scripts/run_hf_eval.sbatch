@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=4:00:00
+#SBATCH --time=8:00:00
 #SBATCH --output=logs/hf_eval_%j_%x.out
 #SBATCH --error=logs/hf_eval_%j_%x.err
 #
@@ -35,6 +35,7 @@ export HF_HOME="${SCRATCH_HF}"
 export HUGGINGFACE_HUB_CACHE="${SCRATCH_HF}/hub"
 export TRANSFORMERS_CACHE="${SCRATCH_HF}/hub"
 export PIP_CACHE_DIR="/scratch/users/${USER}/pip_cache"
+export PYTHONUNBUFFERED=1
 
 # Load .env for HF_TOKEN and OPENAI_API_KEY
 set -a
@@ -53,7 +54,8 @@ echo "=============================="
 # ── Run evaluation (all 6 strategies) ────────────────────────────────────────
 cd "${REPO_ROOT}"
 
-"${CONDA}" run --prefix "${ENV_PREFIX}" python -m Evaluation.run_evaluation \
+export PATH="${ENV_PREFIX}/bin:${PATH}"
+python -m Evaluation.run_evaluation \
     --model "${MODEL_ID}" \
     --method all \
     --limit 200 \

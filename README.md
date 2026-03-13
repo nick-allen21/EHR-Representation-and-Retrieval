@@ -56,7 +56,7 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | **Multi-model generalization (Phase 2)** | Nick | In progress |
 | — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
 | — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Infrastructure done; GPU runs pending |
-| — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | o4-mini done, gpt-4o-mini pending |
+| — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | Done — both complete |
 | — Run full model × retrieval matrix (5 models × 6 strategies) | Nick | |
 | **Learn better scoring functions** | | |
 | — MLP ranker on frozen embeddings | | |
@@ -75,10 +75,10 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 
 |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
 |---|---|---|---|---|---|---|
-| o4-mini (OpenAI, 16k ctx) | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
-| gpt-4o-mini (OpenAI, 128k ctx) | | | | | | |
-| Llama-3.1-8B-Instruct (HF, 128k ctx) | | | | | | |
-| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | | | | | | |
+| o4-mini (OpenAI, 16k ctx) | 0.347 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
+| gpt-4o-mini (OpenAI, 128k ctx) | 0.411 | 0.457 | 0.451 | 0.368 | **0.476** | 0.447 |
+| Llama-3.1-8B-Instruct (HF, 128k ctx) | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | |
+| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | 0.365 | 0.393 | 0.396 | 0.335 | | |
 | Phi-3-mini-4k-instruct (HF, 4k ctx) | | | | | | |
 
 ### Extensions (optional, if time permits)
