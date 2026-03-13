@@ -130,6 +130,8 @@ class HFRunner:
         ]
 
         max_input = self._max_model_len - max_new_tokens
+        orig_trunc_side = self.tokenizer.truncation_side
+        self.tokenizer.truncation_side = "left"
         inputs = self.tokenizer(
             texts,
             return_tensors="pt",
@@ -137,6 +139,7 @@ class HFRunner:
             truncation=True,
             max_length=max_input,
         ).to(self._hf_model.device)
+        self.tokenizer.truncation_side = orig_trunc_side
 
         if inputs["input_ids"].shape[1] >= max_input:
             log.warning(

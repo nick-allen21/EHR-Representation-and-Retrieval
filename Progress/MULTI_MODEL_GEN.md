@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** Infrastructure complete — code changes done, scripts fixed, ready to run models
+**Status:** gpt-4o-mini 5/6 done; Llama-3.1 GPU job running; Mistral/Phi-3 queued
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -27,10 +27,10 @@ The matrix uses **5 models**. We originally dropped Llama because gated access w
 | Model | HF ID | Context | Source | Status |
 |---|---|---|---|---|
 | o4-mini | `o4-mini` | 16k | OpenAI API | **Done (Phase 1)** |
-| gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | Not started |
-| Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | Access approved; tokenizer not yet verified |
-| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | Tokenizer verified |
-| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | Tokenizer verified |
+| gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | **Done (3/12/26)** — all 6 strategies |
+| Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | **5/6 done** — learned pending (1491053) |
+| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | SLURM job running (1490849) — 1/6 done |
+| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | SLURM job running (1490850) — model loaded |
 
 **Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies. The spread from 4k (Phi-3) to 128k (Llama-3.1, gpt-4o-mini) shows whether the retrieval advantage holds across radically different context windows.
 
@@ -123,67 +123,40 @@ Full implementation matching `LLMRunner` interface. Key details:
 
 ---
 
-### Step 5: Build `Evaluation/llm_judge.py` — **DONE (3/13/26)**
+### Step 5: Build `Evaluation/llm_judge.py` — **TODO**
 
 Post-processing script that runs LLM-as-judge on existing result files. Runs independently of `run_evaluation.py`.
 
-Two phases:
-1. **Score** — calls judge LLM on each (question, predicted_answer, gold_answer) triple, writes `judge_score` (1–5) back into result files in-place. Idempotent; re-runs cost $0 (cached).
-2. **Rank** — cross-references judge scores across strategy files by question identity `(subject_id, hadm_id, question)`, computes win counts (fractional for ties), mean scores, score distribution (1–5), and per-difficulty breakdown.
-
-Clinical correctness rubric (1–5 scale, in `scoring.py`):
+Clinical correctness rubric (1–5 scale):
 ```
-5 — Fully correct, includes all key facts from the reference answer.
-4 — Mostly correct, minor omission or imprecision.
-3 — Partially correct, captures some key facts but misses important ones.
-2 — Mostly incorrect, only marginally related to the reference answer.
-1 — Completely wrong or empty.
+5 — Completely correct and complete. All relevant clinical facts present.
+4 — Mostly correct. Minor omissions or imprecision that would not affect clinical decisions.
+3 — Partially correct. Key facts present but important details missing or imprecise.
+2 — Mostly incorrect. Answer is related to the question but contains significant errors.
+1 — Incorrect or irrelevant. Answer does not address the question or contains harmful errors.
 ```
 
-**Default targets:** `full_context`, `semantic_rag_k5`, `learned_k5` (the three most interesting strategies for comparison). Override with `--files`.
+CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o --limit 200`
 
-**Judge model:** `gpt-4o-mini` by default (~$0.02 for 600 calls at 200/file). Switch to `--judge-model gpt-4o` for final results.
-
-**Current status:** 200 rows scored in each of the 3 default target files (full_context, semantic_rag_k5, learned_k5). All cached in `data/results/cache/`.
-
-CLI:
-```bash
-# Default pilot (gpt-4o-mini, 200 rows/file, 3 strategies)
-python -m Evaluation.llm_judge
-
-# Rankings only from existing scores (free)
-python -m Evaluation.llm_judge --rank-only
-
-# Specific files
-python -m Evaluation.llm_judge \
-    --files data/results/o4-mini__full_context.json \
-            data/results/o4-mini__semantic_rag_k5.json \
-            data/results/o4-mini__learned_k5.json
-
-# Full run with gpt-4o for final results
-python -m Evaluation.llm_judge --judge-model gpt-4o --limit 1000
-```
-
-**Cost note:** gpt-4o-mini judge on 3 strategies × 200 Qs ≈ $0.02. Full run (3 × 1,000 Qs) ≈ $0.10 with gpt-4o-mini, ~$2 with gpt-4o. Extend to all 6 strategies × 5 models once HF runs complete.
+**Cost note:** gpt-4o judge on 5 models × 6 strategies × 1,000 Qs = 30,000 calls ≈ $60–120. Sample 200 Qs per cell first to validate the rubric.
 
 ---
 
 ## Execution Order
 
 ```
-Step 0:  Rename existing result files (bash, 1 minute)                    ← TODO (manual)
+Step 0:  Rename existing result files                                     ✓ DONE (3/12/26)
 Step 1:  Fix _save_results naming in run_evaluation.py                    ✓ DONE (3/12/26)
 Step 2:  Edit analysis.py — multi-model grouping (30 min)                 ← TODO
 Step 3:  Add _make_runner() routing in run_evaluation.py                  ✓ DONE (3/12/26)
 Step 4:  Create hf_runner.py                                              ✓ DONE (3/12/26)
-Step 5:  Run gpt-4o-mini (local, ~$8, fills row 2 of matrix)             ← NEXT
-Step 6:  Run smoke_test_models.py on FarmShare (verify Llama tokenizer)   ← NEXT
-Step 7:  Run Llama-3.1-8B on FarmShare (compute only, fills row 3)       ← NEXT
-Step 8:  Run Mistral-7B on FarmShare (compute only, fills row 4)         ← NEXT
-Step 9:  Run Phi-3-mini-4k on FarmShare (compute only, fills row 5)      ← NEXT
-Step 10: Create llm_judge.py + design prompt (1 hr)                       ✓ DONE (3/13/26)
-Step 11: Run LLM-as-judge pilot on 3 strategies × 200 rows               ✓ DONE (3/13/26) — scores in result files
-Step 11b: Run LLM-as-judge full run on all 6 strategies × all models     ← TODO (after HF runs complete)
+Step 5:  Run gpt-4o-mini (fills row 2)                                    ✓ DONE (3/12/26)
+Step 6:  Run smoke_test_models.py on FarmShare                            ✓ DONE (3/12/26) — all 3 pass
+Step 7:  Run Llama-3.1-8B on FarmShare (fills row 3)                      ⏳ 5/6 done; learned submitted (1491053)
+Step 8:  Run Mistral-7B on FarmShare (fills row 4)                        ⏳ SLURM job 1490849 running (1/6)
+Step 9:  Run Phi-3-mini-4k on FarmShare (fills row 5)                     ⏳ SLURM job 1490850 running (0/6)
+Step 10: Create llm_judge.py + design prompt (1 hr)                       ← TODO
+Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO
 Step 12: Update analysis.py + README.md matrix with final numbers         ← TODO
 ```
 
@@ -305,12 +278,12 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 | `Evaluation/run_evaluation.py` | Edit — `_make_runner()` routing + `_save_results` model prefix + `--hf-batch-size` | **Done (3/12/26)** |
 | `Evaluation/hf_runner.py` | **Created** — HuggingFace runner; updated for Llama-3.1 + dynamic max_length | **Done (3/12/26)** |
 | `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model tables | Not started |
-| `Evaluation/llm_judge.py` | **Created** — LLM-as-judge scoring + cross-strategy ranking; gpt-4o-mini default; idempotent; `--rank-only` mode | **Done (3/13/26)** |
+| `Evaluation/llm_judge.py` | **Create** — post-processing LLM-as-judge script | Not started |
 | `requirements.txt` | Edit — bump `transformers>=4.40`, add `accelerate>=0.27` | **Done (3/12/26)** |
 | `scripts/setup_env.sh` | **Created** — conda env setup + cache redirects to scratch (fixed: conda, not micromamba) | **Done (3/12/26)** |
 | `scripts/run_hf_eval.sbatch` | **Created** — SLURM GPU batch job (fixed: conda, not micromamba; all 3 HF models) | **Done (3/12/26)** |
 | `scripts/smoke_test_models.py` | **Created** — tokenizer verification; updated with all 3 HF models | **Done (3/12/26)** |
-| `data/results/*.json` | Rename Phase 1 files to `o4-mini__*.json` | TODO (manual, 1 min) |
+| `data/results/*.json` | Rename Phase 1 files to `o4-mini__*.json` | **Done (3/12/26)** |
 | `Progress/MULTI_MODEL_GEN.md` | Reconciled (3/12/26) — 5-model matrix, fixed discrepancies | **Done (3/12/26)** |
 | `README.md` | Updated model × retrieval matrix to 5 rows + Llama-3.1 in TODO table | **Done (3/12/26)** |
 
@@ -320,11 +293,11 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 
 |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
 |---|---|---|---|---|---|---|
-| o4-mini | 0.348 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
-| gpt-4o-mini | | | | | | |
-| Llama-3.1-8B | | | | | | |
-| Mistral-7B | | | | | | |
-| Phi-3-mini-4k | | | | | | |
+| o4-mini | 0.347 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
+| gpt-4o-mini | 0.411 | 0.457 | 0.451 | 0.368 | **0.476** | 0.447 |
+| Llama-3.1-8B | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | *pending* |
+| Mistral-7B | 0.365 | 0.393 | 0.396 | 0.335 | *running* | |
+| Phi-3-mini-4k | *resubmitted (truncation fix)* | | | | | |
 
 ---
 
@@ -355,12 +328,12 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 - `HF_HOME=/scratch/users/nallen21/hf_cache` already set
 - Future pip installs and model downloads will not consume home quota
 
-### Tokenizer smoke tests passed (3/12/26) — Phi-3 and Mistral only
+### Tokenizer smoke tests passed (3/12/26) — all 3 HF models
+- `meta-llama/Llama-3.1-8B-Instruct`: vocab=128000, max_length=131072 (128k), chat template OK
+- `mistralai/Mistral-7B-Instruct-v0.3`: vocab=32768, chat template uses `[INST]` format, OK
 - `microsoft/Phi-3-mini-4k-instruct`: vocab=32000, max_length=4096, chat template OK
-- `mistralai/Mistral-7B-Instruct-v0.3`: vocab=32768, chat template OK
 - Mistral reports nonsense `model_max_length` (library artifact) — actual limit is 32k
 - Mistral tokenizer defaults to `padding_side=right`; `HFRunner.__init__` overrides to `left`
-- **Llama-3.1-8B-Instruct not yet tested** — needs smoke test run on FarmShare
 
 ### Llama access — RESOLVED (3/12/26)
 - Originally requested `meta-llama/Meta-Llama-Guard-2-8B` by mistake (safety classifier, not QA model)
@@ -381,6 +354,21 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 - Now writes `{model_slug}__{method}.json` (e.g., `o4-mini__bm25_k5.json`)
 - Existing Phase 1 files (`bm25_k5.json`, etc.) still need manual renaming — see Step 0
 
+### SLURM sbatch script failures — FIXED (3/12/26)
+- **Issue 1:** `BASH_SOURCE[0]` inside a SLURM job resolves to the spool copy (e.g., `/var/spool/slurmd/...`), not the original script. `REPO_ROOT` was wrong, causing `mkdir` to fail.
+- **Fix:** Use `SLURM_SUBMIT_DIR` (the directory from which `sbatch` was run) with fallback to `BASH_SOURCE` for interactive use.
+- **Issue 2:** `conda run --no-banner` not supported on FarmShare's conda version.
+- **Fix:** Removed `--no-banner` flag.
+- **Issue 3:** Script had DOS line endings (`\r\n`) from editing on Windows. `sed -i 's/\r$//'` corrupted the file during a connection cutoff, emptying it entirely.
+- **Fix:** Rewrote the script from scratch using heredoc. All line endings are now UNIX.
+
+### Phi-3 right-truncation cuts off question — FIXED (3/13/26)
+- **Symptom:** Phi-3 discharge_only had F1=0.124 — model generated medication lists instead of answering questions
+- **Cause:** `hf_runner.py` used default right-side truncation. For Phi-3 (4096 max, 3584 after gen reserve), the system_prompt + context + question + chat_template exceeded 3584 tokens. Right truncation removed the question at the end, leaving the model to do text continuation.
+- **Fix:** Set `tokenizer.truncation_side = "left"` before tokenizing in `_batch_generate()`, so early context is trimmed rather than the question at the end. Restored after tokenization.
+- **Impact:** Only affects Phi-3 — other models have much larger context windows (32k–128k) and never hit the truncation limit with `token_budget=4096`.
+- Cancelled bad job (1490850), removed bad results, resubmitted (1491077).
+
 ### hf_runner.py hardcoded max_length — FIXED (3/12/26)
 - Previously hardcoded `max_length=4096` for tokenizer truncation, which is correct for Phi-3 but wrong for Llama-3.1 (128k) and Mistral (32k)
 - Now reads `model.config.max_position_embeddings` and reserves space for `max_new_tokens`
@@ -393,19 +381,11 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)  ← still needed if not done
-3. Run `smoke_test_models.py` on FarmShare to verify Llama-3.1-8B-Instruct tokenizer
-4. Run gpt-4o-mini locally as a pipeline smoke test
-5. Submit SLURM jobs for the 3 HF models
-6. Implement Step 2 (analysis.py multi-model grouping) once results exist
-7. ~~Build llm_judge.py~~ — **Done (3/13/26)**. See `Evaluation/llm_judge.py`.
-8. Once HF runs complete: run `python -m Evaluation.llm_judge --judge-model gpt-4o-mini` on all model result files to fill judge scores for the full matrix.
-
-**LLM-as-judge current state (3/13/26):**
-- `Evaluation/llm_judge.py` created with two-phase score+rank flow
-- Pilot scores written: 200 rows × 3 strategies (full_context, semantic_rag_k5, learned_k5)
-- Judge model: gpt-4o-mini (switch to gpt-4o for final paper results)
-- Run `python -m Evaluation.llm_judge --rank-only` to see current rankings instantly (free)
+2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1490759,1490760,1490761`
+3. Verify gpt-4o-mini learned_k5 result exists (may still be running)
+4. Once HF SLURM jobs complete, score results and fill in matrix rows 3-5
+5. Implement Step 2 (analysis.py multi-model grouping)
+6. Build llm_judge.py (Step 10)
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
