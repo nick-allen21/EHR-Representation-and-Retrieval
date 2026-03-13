@@ -3,7 +3,7 @@
 **Owner:** Nick Allen
 **Started:** March 11, 2026
 **Branch:** `nallen21/multi-model-gen`
-**Status:** gpt-4o-mini 5/6 done; Llama-3.1 GPU job running; Mistral/Phi-3 queued
+**Status:** All 5 models complete (30/30 cells); LLM-as-judge code ready, not yet run
 
 **README TODO mapping:** This file tracks progress for:
 - **Multi-model generalization (Phase 2)** — all sub-items
@@ -28,9 +28,9 @@ The matrix uses **5 models**. We originally dropped Llama because gated access w
 |---|---|---|---|---|
 | o4-mini | `o4-mini` | 16k | OpenAI API | **Done (Phase 1)** |
 | gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | **Done (3/12/26)** — all 6 strategies |
-| Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | **5/6 done** — learned pending (1491053) |
-| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | SLURM job running (1490849) — 1/6 done |
-| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | SLURM job running (1490850) — model loaded |
+| Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | **Done (3/13/26)** — all 6 strategies |
+| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | **Done (3/13/26)** — all 6 strategies |
+| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | **Done (3/13/26)** — waiting for GPU slot |
 
 **Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies. The spread from 4k (Phi-3) to 128k (Llama-3.1, gpt-4o-mini) shows whether the retrieval advantage holds across radically different context windows.
 
@@ -60,7 +60,7 @@ The matrix uses **5 models**. We originally dropped Llama because gated access w
 
 ## Implementation Plan
 
-### Step 0: Migrate existing result files — **TODO (manual)**
+### Step 0: Migrate existing result files — **DONE (3/12/26)**
 
 Rename the 6 existing Phase 1 result files to match the new `{model}__{method}.json` convention:
 
@@ -81,7 +81,7 @@ Verify: `ls data/results/o4-mini__*.json` should show 6 files.
 
 ---
 
-### Step 2: Update `analysis.py` for multi-model grouping — **TODO**
+### Step 2: Update `analysis.py` for multi-model grouping — **DONE (3/13/26)**
 
 **File:** `Evaluation/analysis.py`
 
@@ -123,7 +123,7 @@ Full implementation matching `LLMRunner` interface. Key details:
 
 ---
 
-### Step 5: Build `Evaluation/llm_judge.py` — **TODO**
+### Step 5: Build `Evaluation/llm_judge.py` — **DONE (3/13/26)**
 
 Post-processing script that runs LLM-as-judge on existing result files. Runs independently of `run_evaluation.py`.
 
@@ -147,17 +147,17 @@ CLI: `python -m Evaluation.llm_judge --results-dir data/results --judge-model gp
 ```
 Step 0:  Rename existing result files                                     ✓ DONE (3/12/26)
 Step 1:  Fix _save_results naming in run_evaluation.py                    ✓ DONE (3/12/26)
-Step 2:  Edit analysis.py — multi-model grouping (30 min)                 ← TODO
+Step 2:  Edit analysis.py — multi-model grouping                          ✓ DONE (3/13/26)
 Step 3:  Add _make_runner() routing in run_evaluation.py                  ✓ DONE (3/12/26)
 Step 4:  Create hf_runner.py                                              ✓ DONE (3/12/26)
 Step 5:  Run gpt-4o-mini (fills row 2)                                    ✓ DONE (3/12/26)
 Step 6:  Run smoke_test_models.py on FarmShare                            ✓ DONE (3/12/26) — all 3 pass
-Step 7:  Run Llama-3.1-8B on FarmShare (fills row 3)                      ⏳ 5/6 done; learned submitted (1491053)
-Step 8:  Run Mistral-7B on FarmShare (fills row 4)                        ⏳ SLURM job 1490849 running (1/6)
-Step 9:  Run Phi-3-mini-4k on FarmShare (fills row 5)                     ⏳ SLURM job 1490850 running (0/6)
-Step 10: Create llm_judge.py + design prompt (1 hr)                       ← TODO
-Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO
-Step 12: Update analysis.py + README.md matrix with final numbers         ← TODO
+Step 7:  Run Llama-3.1-8B on FarmShare (fills row 3)                      ✓ DONE (3/13/26) — all 6 strategies
+Step 8:  Run Mistral-7B on FarmShare (fills row 4)                        ✓ DONE (3/13/26) — all 6 strategies
+Step 9:  Run Phi-3-mini-4k on FarmShare (fills row 5)                     ✓ DONE (3/13/26) — all 6 strategies
+Step 10: Create llm_judge.py + design prompt                              ✓ DONE (3/13/26)
+Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO (do not run yet)
+Step 12: Update analysis.py + README.md matrix with final numbers         ✓ DONE (3/13/26) — 30/30 cells filled
 ```
 
 Run gpt-4o-mini command (after Step 0):
@@ -277,8 +277,8 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 |---|---|---|
 | `Evaluation/run_evaluation.py` | Edit — `_make_runner()` routing + `_save_results` model prefix + `--hf-batch-size` | **Done (3/12/26)** |
 | `Evaluation/hf_runner.py` | **Created** — HuggingFace runner; updated for Llama-3.1 + dynamic max_length | **Done (3/12/26)** |
-| `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model tables | Not started |
-| `Evaluation/llm_judge.py` | **Create** — post-processing LLM-as-judge script | Not started |
+| `Evaluation/analysis.py` | Edit — parse `(model, method)` from filenames, multi-model matrix tables, heatmap | **Done (3/13/26)** |
+| `Evaluation/llm_judge.py` | **Created** — post-processing LLM-as-judge with clinical rubric (gpt-4o) | **Done (3/13/26)** |
 | `requirements.txt` | Edit — bump `transformers>=4.40`, add `accelerate>=0.27` | **Done (3/12/26)** |
 | `scripts/setup_env.sh` | **Created** — conda env setup + cache redirects to scratch (fixed: conda, not micromamba) | **Done (3/12/26)** |
 | `scripts/run_hf_eval.sbatch` | **Created** — SLURM GPU batch job (fixed: conda, not micromamba; all 3 HF models) | **Done (3/12/26)** |
@@ -295,9 +295,19 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 |---|---|---|---|---|---|---|
 | o4-mini | 0.347 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
 | gpt-4o-mini | 0.411 | 0.457 | 0.451 | 0.368 | **0.476** | 0.447 |
-| Llama-3.1-8B | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | *pending* |
-| Mistral-7B | 0.365 | 0.393 | 0.396 | 0.335 | *running* | |
-| Phi-3-mini-4k | *resubmitted (truncation fix)* | | | | | |
+| Llama-3.1-8B | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | 0.391 |
+| Mistral-7B | 0.365 | 0.393 | 0.396 | 0.335 | **0.415** | 0.398 |
+| Phi-3-mini-4k | 0.124 | 0.184 | 0.239 | 0.240 | **0.299** | 0.287 |
+
+## Model × Retrieval Matrix (ROUGE-L)
+
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
+|---|---|---|---|---|---|---|
+| o4-mini | 0.289 | 0.338 | 0.325 | 0.265 | **0.350** | 0.335 |
+| gpt-4o-mini | 0.354 | 0.386 | 0.385 | 0.316 | **0.404** | 0.379 |
+| Llama-3.1-8B | 0.275 | 0.312 | 0.303 | 0.266 | 0.329 | **0.329** |
+| Mistral-7B | 0.306 | 0.327 | 0.332 | 0.281 | **0.346** | 0.330 |
+| Phi-3-mini-4k | 0.102 | 0.152 | 0.199 | 0.203 | **0.249** | 0.242 |
 
 ---
 
@@ -381,11 +391,10 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1490759,1490760,1490761`
-3. Verify gpt-4o-mini learned_k5 result exists (may still be running)
-4. Once HF SLURM jobs complete, score results and fill in matrix rows 3-5
-5. Implement Step 2 (analysis.py multi-model grouping)
-6. Build llm_judge.py (Step 10)
+2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1491077`
+3. Once Phi-3 SLURM job completes, score results and fill in matrix row 5 (the last empty row)
+4. Run LLM-as-judge: `python -m Evaluation.llm_judge --limit 200` (pilot) then full run
+5. Update matrices with LLM-judge scores (new column)
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
