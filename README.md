@@ -52,18 +52,18 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | Nick | Done |
 | — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
 | — Score with ROUGE-L, token F1 | Nick | Done |
-| — LLM-as-judge scoring | Nick | In progress — designing prompt + running |
+| — LLM-as-judge scoring | Nick | Code ready (`llm_judge.py`), not yet run |
 | **Multi-model generalization (Phase 2)** | Nick | In progress |
 | — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
-| — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Infrastructure done; GPU runs pending |
+| — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Done — all 3 models complete |
 | — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | Done — both complete |
-| — Run full model × retrieval matrix (5 models × 6 strategies) | Nick | |
+| — Run full model × retrieval matrix (5 models × 6 strategies) | Nick | **Done** — 30/30 cells filled |
 | **Learn better scoring functions** | | |
 | — MLP ranker on frozen embeddings | | |
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
-| — LLM-as-judge prompt design and execution | Nick | In progress |
+| — LLM-as-judge prompt design and execution | Nick | Prompt + code done; not yet run |
 | — Evidence support metrics | | |
 | — Feature group ablations | | |
 | — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
@@ -71,15 +71,25 @@ A supervised **L1-regularized logistic regression** model that learns to score a
 | **Clean up code and turn in** | | |
 | **Project poster** | | |
 
-**Model × retrieval matrix** (to be filled during Phase 2):
+**Model × retrieval matrix — Token F1:**
 
 |  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
 |---|---|---|---|---|---|---|
 | o4-mini (OpenAI, 16k ctx) | 0.347 | 0.415 | 0.391 | 0.321 | **0.424** | 0.406 |
 | gpt-4o-mini (OpenAI, 128k ctx) | 0.411 | 0.457 | 0.451 | 0.368 | **0.476** | 0.447 |
-| Llama-3.1-8B-Instruct (HF, 128k ctx) | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | |
-| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | 0.365 | 0.393 | 0.396 | 0.335 | | |
-| Phi-3-mini-4k-instruct (HF, 4k ctx) | | | | | | |
+| Llama-3.1-8B-Instruct (HF, 128k ctx) | 0.327 | 0.373 | 0.364 | 0.315 | **0.394** | 0.391 |
+| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | 0.365 | 0.393 | 0.396 | 0.335 | **0.415** | 0.398 |
+| Phi-3-mini-4k-instruct (HF, 4k ctx) | 0.124 | 0.184 | 0.239 | 0.240 | **0.299** | 0.287 |
+
+**Model × retrieval matrix — ROUGE-L:**
+
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | **learned** |
+|---|---|---|---|---|---|---|
+| o4-mini (OpenAI, 16k ctx) | 0.289 | 0.338 | 0.325 | 0.265 | **0.350** | 0.335 |
+| gpt-4o-mini (OpenAI, 128k ctx) | 0.354 | 0.386 | 0.385 | 0.316 | **0.404** | 0.379 |
+| Llama-3.1-8B-Instruct (HF, 128k ctx) | 0.275 | 0.312 | 0.303 | 0.266 | 0.329 | **0.329** |
+| Mistral-7B-Instruct-v0.3 (HF, 32k ctx) | 0.306 | 0.327 | 0.332 | 0.281 | **0.346** | 0.330 |
+| Phi-3-mini-4k-instruct (HF, 4k ctx) | 0.102 | 0.152 | 0.199 | 0.203 | **0.249** | 0.242 |
 
 ### Extensions (optional, if time permits)
 
@@ -380,13 +390,15 @@ Logreg/                      Phase 1a — learned chunk selector
 ├── selector.py              inference: score chunks, return top-K
 └── run.py                   CLI: train / evaluate / select
 
-Evaluation/                  Phase 1b — downstream LLM comparison (Nick)
+Evaluation/                  Phase 1b + Phase 2 — downstream LLM comparison (Nick)
 ├── PLAN.md                  experimental design
 ├── context_builders.py      6 retrieval strategies → prompts
 ├── llm_runner.py            async OpenAI wrapper + response cache
-├── scoring.py               token F1, ROUGE-L, LLM-as-judge (stub)
-├── run_evaluation.py        CLI orchestrator
-└── analysis.py              summary tables, plots, JSON export
+├── hf_runner.py             HuggingFace local inference runner (GPU batched)
+├── scoring.py               token F1, ROUGE-L scoring
+├── llm_judge.py             LLM-as-judge post-processing (gpt-4o rubric)
+├── run_evaluation.py        CLI orchestrator (OpenAI + HF routing)
+└── analysis.py              multi-model summary tables, heatmaps, JSON export
 
 Progress/                    documentation for agent handoff
 └── CORE_COMPARISON_AGENT.md Phase 1b progress log (Nick)
@@ -464,9 +476,28 @@ python -m Evaluation.run_evaluation --method bm25 --k 10 --token-budget 4096
 
 # Analyze results and generate plots
 python -m Evaluation.analysis --plots
+
+# Run with a HuggingFace model on GPU (Phase 2)
+python -m Evaluation.run_evaluation \
+  --method all --model meta-llama/Llama-3.1-8B-Instruct --limit 200
+
+# Or via SLURM on FarmShare
+sbatch scripts/run_hf_eval.sbatch meta-llama/Llama-3.1-8B-Instruct
 ```
 
-Results saved to `data/results/<strategy>.json`. LLM responses are cached in `data/results/cache/` to avoid re-running identical prompts.
+### Step 7: LLM-as-judge scoring
+
+```bash
+# Pilot run — 50 questions per file, validate rubric
+python -m Evaluation.llm_judge --limit 50
+
+# Full run — all questions
+python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o
+```
+
+Judged results are written to `data/results/judged/`. The judge uses gpt-4o with a 1-5 clinical correctness rubric.
+
+Results saved to `data/results/{model_slug}__{method}.json`. LLM responses are cached in `data/results/cache/` to avoid re-running identical prompts.
 
 ---
 
