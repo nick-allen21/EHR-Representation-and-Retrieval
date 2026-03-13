@@ -30,7 +30,7 @@ The matrix uses **5 models**. We originally dropped Llama because gated access w
 | gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | **Done (3/12/26)** — all 6 strategies |
 | Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | **Done (3/13/26)** — all 6 strategies |
 | Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | **Done (3/13/26)** — all 6 strategies |
-| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | **Done (3/13/26)** — waiting for GPU slot |
+| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | **Done (3/13/26)** — all 6 strategies — waiting for GPU slot |
 
 **Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies. The spread from 4k (Phi-3) to 128k (Llama-3.1, gpt-4o-mini) shows whether the retrieval advantage holds across radically different context windows.
 

@@ -184,7 +184,7 @@ A single global scoring function:
 p(y=1 | q, c) = σ(w⊤ φ(q, c))
 ```
 
-where φ(q, c) is a 130-dimensional feature vector for (question q, chunk c). The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
+where φ(q, c) is a 160-dimensional feature vector for (question q, chunk c), capturing lexical/semantic similarity, section structure, temporal proximity, clinical salience, and cross-feature interactions. The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
 
 ---
 
@@ -306,9 +306,9 @@ procedure, other
 
 ---
 
-## Feature Vector (130 dimensions)
+## Feature Vector (160 dimensions)
 
-Every `(question, chunk)` pair is converted into a 130-dimensional float32 vector. The L1 penalty drives most weights to zero; only the most informative features survive.
+Every `(question, chunk)` pair is converted into a 160-dimensional float32 vector. The L1 penalty drives most weights to zero; only the most informative features survive. The vector has evolved through feature enrichment (see `Progress/FEATURE_ENRICHMENT.md`).
 
 ### Scalar features (5)
 
@@ -337,7 +337,7 @@ Classified from question text by keyword matching:
 | `procedure` | procedure, surgery, operation, performed, intervention |
 | `other` | (no keywords matched) |
 
-### Section × Question-type interactions (indices 30+)
+### Section × Question-type interactions (indices 30–129)
 
 Every pairwise product of the section one-hot and question-type one-hot.
 
@@ -347,6 +347,32 @@ Examples of what these capture:
 - `int_discharge_instructions_labs` — discharge instructions chunk + lab question → likely zero (irrelevant)
 
 The model learns these associations from data rather than hard-coding them. L1 regularization zeroes out the vast majority of interactions — only the combinations that genuinely predict relevance survive.
+
+### Group A: Text-signal features (4 dims)
+
+| Name | Type | Description |
+|---|---|---|
+| `has_temporal_marker` | 0/1 | Chunk contains temporal expressions ("today", "overnight", "post-op day N", etc.) |
+| `temporal_density` | float | Temporal marker count / word count |
+| `has_critical_event` | 0/1 | Chunk contains critical clinical keywords (ICU transfer, intubation, cardiac arrest, etc.) |
+| `has_abnormal_lab` | 0/1 | Chunk contains lab abnormality signals (H/L flags, "CRITICAL", "abnormal") |
+
+### Group B: Temporal proximity features (4 dims)
+
+| Name | Type | Description |
+|---|---|---|
+| `days_to_discharge` | float [0,1] | Days from event timestamp to discharge, normalized by admission length |
+| `is_within_24h` | 0/1 | Event occurred within 24h of discharge |
+| `is_within_1week` | 0/1 | Event occurred within 7 days of discharge |
+| `has_no_timestamp` | 0/1 | 1 for note-section chunks (no embedded timestamp) |
+
+### Group C: Signal × question-type interactions (8 dims)
+
+Cross-products of highest-signal new features with relevant question types (e.g., `has_abnormal_lab × qt_labs`, `is_within_24h × qt_medications`).
+
+### Group D: Precision features (6 dims)
+
+Section-header matching (`has_admission_meds_hdr`, `has_discharge_meds_hdr`, etc.) and `numeric_density`. The strongest new feature is `has_admission_meds_hdr` (weight +1.19).
 
 ---
 
@@ -415,7 +441,7 @@ Logreg/                      Phase 1a — learned chunk selector
 ├── data_loader.py           loads + joins timelines and QA pairs
 ├── chunker.py               section-based and fixed-size chunking
 ├── labeler.py               weak binary labels via token F1 overlap
-├── features.py              130-dim feature extraction
+├── features.py              160-dim feature extraction (Groups A/B/C/D)
 ├── train.py                 L1 logistic regression training
 ├── selector.py              inference: score chunks, return top-K
 └── run.py                   CLI: train / evaluate / select
@@ -430,8 +456,10 @@ Evaluation/                  Phase 1b + Phase 2 — downstream LLM comparison (N
 ├── run_evaluation.py        CLI orchestrator (OpenAI + HF routing)
 └── analysis.py              multi-model summary tables, heatmaps, JSON export
 
-Progress/                    documentation for agent handoff
-└── CORE_COMPARISON_AGENT.md Phase 1b progress log (Nick)
+Progress/                    per-TODO agent progress logs
+├── CORE_COMPARISON_AGENT.md Phase 1b — core comparison (Nick)
+├── MULTI_MODEL_GEN.md       Phase 2 — multi-model generalization (Nick)
+└── FEATURE_ENRICHMENT.md    Feature enrichment + dual QA source (Niki)
 ```
 
 ---

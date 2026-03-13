@@ -72,6 +72,15 @@ Every unit of work follows a strict **1:1:1:1 mapping**:
 - Fill in any results tables (e.g., model × retrieval matrix) as data becomes available
 - Always include the metric name, dataset size, and conditions
 
+### Keeping README current
+
+- **README.md must always reflect the actual state of the codebase.** After making changes to code, features, file structure, or results, update the corresponding README sections immediately — don't leave stale descriptions.
+- If you add new files, update the File Structure section.
+- If you change the feature vector, update the Feature Vector section (dimensions, group descriptions).
+- If you add or modify evaluation results, update the results tables and matrices.
+- If you add new CLI commands or change existing ones, update the How to Run section.
+- Treat README.md as the project's source of truth for anyone reading it for the first time.
+
 ---
 
 ## 4. Git Workflow
@@ -133,10 +142,11 @@ python -m Evaluation.analysis --plots
 
 ### Result files
 
-- Per-strategy results go to `data/results/<strategy>.json`
+- Per-model, per-strategy results go to `data/results/{model_slug}__{strategy}.json` (e.g., `o4-mini__bm25_k5.json`)
 - Response cache lives in `data/results/cache/` (gitignored, regenerable)
 - Plots go to `data/results/plots/`
 - Summary JSON goes to `data/results/summary.json`
+- LLM-as-judge output goes to `data/results/judged/`
 
 ### Adding a new model
 
@@ -185,16 +195,19 @@ When finishing a session or completing a TODO:
 
 | Path | Purpose |
 |---|---|
-| `README.md` | Project overview, TODO table (source of truth for task tracking), results |
+| `README.md` | Project overview, TODO table (source of truth for task tracking), results — **keep current** |
 | `AGENT_README.md` | This file — agent operating procedures |
 | `SETUP.md` | Environment setup instructions |
 | `Progress/*.md` | Per-TODO progress logs (1:1 with TODO items) |
 | `Evaluation/PLAN.md` | Experimental design for the evaluation pipeline |
 | `Evaluation/context_builders.py` | Retrieval strategy implementations |
-| `Evaluation/llm_runner.py` | LLM API wrapper + cache |
-| `Evaluation/scoring.py` | Scoring functions (token F1, ROUGE-L, LLM-as-judge) |
-| `Evaluation/run_evaluation.py` | CLI orchestrator |
-| `Evaluation/analysis.py` | Result aggregation and visualization |
-| `Logreg/` | Learned chunk selector (training + inference) |
+| `Evaluation/llm_runner.py` | LLM API wrapper + cache (OpenAI models) |
+| `Evaluation/hf_runner.py` | HuggingFace local inference runner (GPU batched) |
+| `Evaluation/scoring.py` | Scoring functions (token F1, ROUGE-L) |
+| `Evaluation/llm_judge.py` | LLM-as-judge post-processing (gpt-4o rubric) |
+| `Evaluation/run_evaluation.py` | CLI orchestrator (OpenAI + HF model routing) |
+| `Evaluation/analysis.py` | Multi-model result aggregation, matrices, heatmaps |
+| `Logreg/` | Learned chunk selector (training + inference, 160-dim features) |
 | `Preprocess/` | BigQuery → patient timelines |
 | `Generation/` | gpt-4o QA pair generation |
+| `scripts/` | FarmShare setup, SLURM batch jobs, smoke tests |
