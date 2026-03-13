@@ -469,26 +469,16 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-<<<<<<< HEAD
-2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1491077`
-3. Once Phi-3 SLURM job completes, score results and fill in matrix row 5 (the last empty row)
-4. Run LLM-as-judge: `python -m Evaluation.llm_judge --limit 200` (pilot) then full run
-5. Update matrices with LLM-judge scores (new column)
-=======
-2. Execute Step 0 — rename existing Phase 1 result files (manual, 1 min)  ← still needed if not done
-3. Run `smoke_test_models.py` on FarmShare to verify Llama-3.1-8B-Instruct tokenizer
-4. Run gpt-4o-mini locally as a pipeline smoke test
-5. Submit SLURM jobs for the 3 HF models
-6. Implement Step 2 (analysis.py multi-model grouping) once results exist
-7. ~~Build llm_judge.py~~ — **Done (3/13/26)**. See `Evaluation/llm_judge.py`.
-8. Once HF runs complete: run `python -m Evaluation.llm_judge --judge-model gpt-4o-mini` on all model result files to fill judge scores for the full matrix.
+2. All 30 matrix cells are filled (5 models × 6 strategies). LLM-as-judge pilot is done.
+3. To extend judge scoring: `python -m Evaluation.llm_judge --limit 1000` (all rows) or add more model files via `--files`
+4. To view current rankings instantly (free): `python -m Evaluation.llm_judge --rank-only`
+5. Update matrices with LLM-judge scores (new column) once full scoring is complete
 
 **LLM-as-judge current state (3/13/26):**
 - `Evaluation/llm_judge.py` created with two-phase score+rank flow
-- Pilot scores written: 200 rows × 3 strategies (full_context, semantic_rag_k5, learned_k5)
-- Judge model: gpt-4o (default). Pilot was run with gpt-4o-mini via `--judge-model gpt-4o-mini`.
-- Run `python -m Evaluation.llm_judge --rank-only` to see current rankings instantly (free)
->>>>>>> 86dd6d5 (update llm-as-judge score saving to results folder)
+- Pilot scores written: 200 rows × 3 o4-mini strategies (full_context, semantic_rag_k5, learned_k5)
+- Judge model: gpt-4o-mini used for pilot. Default is gpt-4o for production runs.
+- Rankings and scores saved to `data/results/judge_rankings.json` and `data/results/summary.json`
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
