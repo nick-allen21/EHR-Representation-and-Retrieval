@@ -30,8 +30,9 @@ import math
 from pathlib import Path
 
 # ── Known QA sources (pass either to load_qa_pairs / load_and_merge) ─────────
-QA_GENERATED = Path("data/generated/qa_pairs.json")
-QA_EHR_DS_QA = Path("data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json")
+QA_GENERATED    = Path("data/generated/qa_pairs.json")
+QA_EHR_DS_QA    = Path("data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json")
+QA_EHR_DS_QA_CSV = Path("data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv")
 
 _DEFAULT_TIMELINES = Path("data/processed/patient_timelines.json")
 _DEFAULT_QA_JSON   = QA_GENERATED
@@ -57,18 +58,48 @@ def load_timelines(path: str | Path = _DEFAULT_TIMELINES) -> list[dict]:
         return json.load(f)
 
 
+def load_ehr_ds_qa_csv(path: str | Path = QA_EHR_DS_QA_CSV) -> list[dict]:
+    """Load the EHR-DS-QA benchmark from its CSV file.
+
+    The CSV has one row per admission with qa_pairs as a JSON string.
+    Returns records in the same format as load_qa_pairs() (list of
+    {subject_id, hadm_id, qa_pairs}).
+    """
+    import csv
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"EHR-DS-QA CSV not found at '{path}'.")
+
+    by_key: dict[tuple[int, int], list[dict]] = {}
+    with path.open() as f:
+        for row in csv.DictReader(f):
+            try:
+                sid  = int(row["subject_id"])
+                hid  = int(row["hadm_id"])
+                pairs = json.loads(row["qa_pairs"])
+            except (KeyError, ValueError, json.JSONDecodeError):
+                continue
+            key = (sid, hid)
+            by_key.setdefault(key, []).extend(pairs)
+
+    return [
+        {"subject_id": sid, "hadm_id": hid, "qa_pairs": pairs}
+        for (sid, hid), pairs in by_key.items()
+    ]
+
+
 def load_qa_pairs(path: str | Path = _DEFAULT_QA_JSON) -> list[dict]:
     """Load a QA pairs file.
 
-    Pass QA_GENERATED or QA_EHR_DS_QA (or any custom path) explicitly to choose
-    which dataset to use.  Defaults to QA_GENERATED (data/generated/qa_pairs.json).
+    Pass QA_GENERATED, QA_EHR_DS_QA_CSV, or any custom path.
+    Defaults to QA_GENERATED (data/generated/qa_pairs.json).
 
     QA_GENERATED records contain:
         subject_id  int / str
         hadm_id     int / str
         qa_pairs    list of {question, answer, difficulty, source_types, reasoning}
 
-    QA_EHR_DS_QA records contain:
+    QA_EHR_DS_QA_CSV records contain:
         subject_id  int / str
         hadm_id     int / str
         qa_pairs    list of {question, answer}   (no source_types — always discharge-grounded)
@@ -78,9 +109,11 @@ def load_qa_pairs(path: str | Path = _DEFAULT_QA_JSON) -> list[dict]:
         raise FileNotFoundError(
             f"QA pairs not found at '{path}'.\n"
             "Options:\n"
-            f"  Generated (gpt-4o):  pass QA_GENERATED  — run `python -m Generation.generate_qa` first\n"
-            f"  EHR-DS-QA (shipped): pass QA_EHR_DS_QA  — available at {QA_EHR_DS_QA}"
+            f"  Generated (gpt-4o):  pass QA_GENERATED    — run `python -m Generation.generate_qa` first\n"
+            f"  EHR-DS-QA (shipped): pass QA_EHR_DS_QA_CSV — available at {QA_EHR_DS_QA_CSV}"
         )
+    if path.suffix == ".csv":
+        return load_ehr_ds_qa_csv(path)
     with path.open() as f:
         return json.load(f)
 

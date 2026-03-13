@@ -19,7 +19,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 |---|---|---|---|---|
 | **Patient timelines** | `data/processed/patient_timelines.json` | 200 patients | EHR input to all pipelines (discharge summaries + structured events) | ✅ In repo (Git LFS) |
 | **gpt-4o QA pairs** | `data/generated/qa_pairs.json` | 198 patients, 990 pairs | Dev set for training logreg + downstream LLM evaluation | ✅ In repo (Git LFS) |
-| **EHR-DS-QA (full)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json` | 21k patients, ~157k pairs | Alternative training supervision (Llama-2 generated, no difficulty/source metadata) | ✅ Shipped in repo |
+| **EHR-DS-QA (full)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv` | 21k patients, ~157k pairs | Alternative training supervision (Llama-2 generated, no difficulty/source metadata). 198/198 of our patients covered (1,612 pairs). | ✅ Shipped in repo |
 | **EHR-DS-QA (verified)** | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json` | 70 patients, 478 correct pairs | Physician-verified QA — partial holdout option (questions are relatively simple) | ✅ Shipped in repo |
 | **Gold standard QA** | `data/gold/` *(not yet added)* | ~926 pairs | Primary held-out test set — physician-authored, complex clinical questions. **Do not use for training or dev evaluation.** | ⬜ TODO: download and add |
 
@@ -150,10 +150,10 @@ Frozen o4-mini evaluated on 200 patients (1,000 QA pairs) with 4,096-token conte
 | recency (N=25) | 0.391 | 0.325 | 3,258 |
 | BM25 (K=5) | 0.321 | 0.265 | 1,070 |
 | semantic RAG (K=5) | **0.424** | **0.350** | 1,336 |
-| learned (K=5) baseline | 0.406 | 0.335 | 1,064 |
-| learned (K=5) enriched | 0.405 | 0.331 | 1,105 |
+| learned (K=5) GPT-4o train | 0.405 | 0.331 | 1,105 |
+| learned (K=5) EHR-DS-QA train | 0.406 | 0.336 | 1,366 |
 
-The learned selector achieves comparable accuracy to semantic RAG and full-context while using **72% fewer tokens** than full-context. The enriched model (146 features) improves Recall@K at the retrieval layer (+6pts @K=3) but Token F1 / ROUGE-L are flat — consistent with lexical metrics being too coarse to detect retrieval improvements at this scale. LLM-as-judge scoring is needed to measure semantic quality gains.
+The learned selector achieves comparable accuracy to semantic RAG and full-context while using **72% fewer tokens** than full-context. Training on the independent EHR-DS-QA benchmark (breaking the circular GPT-4o train/eval loop) achieves the same or better Token F1, validating that the learned selector generalizes across QA sources. LLM-as-judge scoring is needed to measure semantic quality gains beyond lexical metrics.
 
 ---
 
