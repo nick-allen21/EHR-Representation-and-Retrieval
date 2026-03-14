@@ -1,0 +1,14 @@
+\paragraph{Clinical language models for notes.}
+Clinical notes differ substantially from general-domain text, motivating domain-adapted LMs. ClinicalBERT further pre-trains BERT on clinical notes and improves downstream performance (e.g., readmission prediction), indicating that domain pretraining captures clinically meaningful relations \citep{huang2019clinicalbert}. We likewise operate on clinical text, but focus on \emph{evidence selection} under budget rather than predictive modeling.
+
+\paragraph{Clinical QA benchmarks over EHR notes.}
+Clinical QA datasets span large-scale synthetic supervision and clinician-reviewed benchmarks. emrQA builds QA from i2b2-derived annotations to enable scale \citep{pampari2018emrqa}. EHRNoteQA targets realistic practice by generating questions over MIMIC-IV discharge summaries and having clinicians review/refine them, including multi-admission reasoning \citep{kweon2024ehrnoteqa}. EHR-DS-QA provides a large synthetic QA resource from discharge summaries but is primarily machine-generated and noisier \citep{kotschenreuther2024ehrdsqa}. We use clinician-reviewed benchmarks for trustworthy evaluation while leveraging scalable model-generated QA for training when needed.
+
+\paragraph{Retrieval-augmented generation and passage retrieval.}
+Our work builds on RAG: retrieve evidence and condition generation on it. BM25 is a strong lexical baseline within the probabilistic relevance framework \citep{robertson2009bm25}. Dense retrieval methods such as DPR learn dual-encoder representations and often improve retrieval over BM25 in open-domain QA \citep{karpukhin2020dpr}.
+
+\paragraph{Limitations of traditional RAG in medicine.}
+Even citation-grounded retrieval-augmented systems can be \emph{dangerous medical communicators}: they may decontextualize facts, omit pragmatically relevant details, or reinforce user presuppositions due to narrow interpretations of query intent \citep{wong2025ragdanger}. This motivates our emphasis on selecting \emph{minimal but coherent} patient-specific evidence, not merely maximizing similarity.
+
+\paragraph{Real-world clinical search tools (OpenEvidence).}
+Clinical-facing tools increasingly use retrieval + generation for evidence synthesis. OpenEvidence describes a physician-facing system grounded in trusted sources \citep{openevidence_about}, and early primary-care evaluations have studied its practical use and limitations \citep{hurt2025openevidence}. While OpenEvidence targets external medical literature, our setting is complementary: selecting \emph{patient-specific} evidence from longitudinal EHRs for grounded clinical QA.

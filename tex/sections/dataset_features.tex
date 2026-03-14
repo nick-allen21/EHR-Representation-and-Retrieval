@@ -1,0 +1,14 @@
+\paragraph{Data sources.}
+All patient data is derived from MIMIC-IV (core tables + MIMIC-IV-Note), accessed through PhysioNet-hosted BigQuery tables and a preprocessing pipeline that materializes per-admission longitudinal timelines . The pipeline joins demographics/admissions with structured events (labs, vitals, medications, procedures, diagnoses) and discharge summaries into a single JSON record per admission .
+
+\paragraph{QA supervision.}
+We generate QA pairs using a larger model (gpt-4o) over serialized patient timelines, producing question, answer, difficulty, and required source types; this provides scalable supervision for training the selector . For robustness and to mitigate evaluation circularity, the codebase also supports training on an independent synthetic QA source (EHR-DS-QA) and using clinician-reviewed datasets as held-out evaluation when added. It is noted that QA pairs even generated from a larger model are far from perfect -- however, the goal here is to maximize a smaller model's abilities to be that of a larger model, which can be useful in resource constrained settings (or with fine-tuned smaller models).
+
+\paragraph{Chunking.}
+We chunk discharge summaries using section-aware splitting when headers are present (e.g., \texttt{HOSPITAL COURSE}, \texttt{DISCHARGE MEDICATIONS}), with a fallback to fixed-size overlapping token windows to guarantee coverage . Structured events are serialized into short snippets and included as additional candidate chunks .
+
+\paragraph{Weak labels for training.}
+Because the supervision provides (question, answer) but not per-chunk relevance annotations, we assign binary labels using token-level overlap (token F1) between the answer text and the chunk text at a chosen threshold. This yields a weak but scalable relevance proxy .
+
+\paragraph{Feature vector.}
+The selector uses a feature vector $\phi(q,c)$ of 166 features. The core features combine semantic and lexical similarity between the question and chunk (embedding cosine, TF-IDF cosine, token overlap) with structural signals (chunk position in the note and length). We also include document structure via section one-hots (19 sections), question-type one-hots (6 types), and a large set of section × question-type interaction features (102) so the model can learn, for example, that medication questions should prioritize medication sections; L1 regularization zeroes out many interactions. Other features add temporal cues and clinical salience (temporal language markers, ICU/intubation/arrest flags, abnormal lab indicators, and proximity-to-discharge signals, plus interactions), which improved retrieval performance (e.g., Recall@3 and Recall@5) over the baseline.
