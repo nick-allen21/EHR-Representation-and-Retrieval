@@ -1,0 +1,222 @@
+{
+  "gpt-4o-mini": {
+    "bm25_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4930731292607371,
+      "rouge_l_f1_mean": 0.4529527601040302,
+      "context_tokens_mean": 875.1025104602511,
+      "prompt_tokens_mean": 951.8535564853556
+    },
+    "discharge_only": {
+      "n": 478,
+      "token_f1_mean": 0.6076937058677743,
+      "rouge_l_f1_mean": 0.5749996405086539,
+      "context_tokens_mean": 1975.2740585774059,
+      "prompt_tokens_mean": 2046.7928870292887
+    },
+    "full_context": {
+      "n": 478,
+      "token_f1_mean": 0.45667382229272596,
+      "rouge_l_f1_mean": 0.422862732386672,
+      "context_tokens_mean": 3484.7217573221756,
+      "prompt_tokens_mean": 3561.8765690376567
+    },
+    "learned_k5": {
+      "n": 478,
+      "token_f1_mean": 0.5617593629834396,
+      "rouge_l_f1_mean": 0.5242206028988875,
+      "context_tokens_mean": 679.1485355648535,
+      "prompt_tokens_mean": 756.1506276150627
+    },
+    "recency_n25": {
+      "n": 478,
+      "token_f1_mean": 0.6007053801231885,
+      "rouge_l_f1_mean": 0.5651259530893873,
+      "context_tokens_mean": 2570.644351464435,
+      "prompt_tokens_mean": 2647.10460251046
+    },
+    "semantic_rag_k5": {
+      "n": 478,
+      "token_f1_mean": 0.5555382133527986,
+      "rouge_l_f1_mean": 0.5157108201672791,
+      "context_tokens_mean": 567.092050209205,
+      "prompt_tokens_mean": 643.9309623430962
+    }
+  },
+  "meta-llama--Llama-3.1-8B-Instruct": {
+    "bm25_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4339990935869146,
+      "rouge_l_f1_mean": 0.39990332591517014,
+      "context_tokens_mean": 875.1025104602511,
+      "prompt_tokens_mean": 992.4414225941423
+    },
+    "discharge_only": {
+      "n": 478,
+      "token_f1_mean": 0.5510720298163234,
+      "rouge_l_f1_mean": 0.514574866172073,
+      "context_tokens_mean": 1975.2740585774059,
+      "prompt_tokens_mean": 2121.8200836820083
+    },
+    "full_context": {
+      "n": 478,
+      "token_f1_mean": 0.39395787111868663,
+      "rouge_l_f1_mean": 0.3654501989684932,
+      "context_tokens_mean": 3484.7217573221756,
+      "prompt_tokens_mean": 3621.0564853556484
+    },
+    "learned_k5": {
+      "n": 478,
+      "token_f1_mean": 0.510577809170556,
+      "rouge_l_f1_mean": 0.47475739033683495,
+      "context_tokens_mean": 679.1485355648535,
+      "prompt_tokens_mean": 794.0271966527197
+    },
+    "recency_n25": {
+      "n": 478,
+      "token_f1_mean": 0.5398708969880535,
+      "rouge_l_f1_mean": 0.5077705300727153,
+      "context_tokens_mean": 2570.644351464435,
+      "prompt_tokens_mean": 2718.7907949790797
+    },
+    "semantic_rag_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4953307510443065,
+      "rouge_l_f1_mean": 0.45818969514659114,
+      "context_tokens_mean": 567.092050209205,
+      "prompt_tokens_mean": 679.8033472803347
+    }
+  },
+  "microsoft--Phi-3-mini-4k-instruct": {
+    "bm25_k5": {
+      "n": 478,
+      "token_f1_mean": 0.41253133549627236,
+      "rouge_l_f1_mean": 0.3851655026333229,
+      "context_tokens_mean": 875.1025104602511,
+      "prompt_tokens_mean": 1201.8138075313807
+    },
+    "discharge_only": {
+      "n": 478,
+      "token_f1_mean": 0.4198952127885678,
+      "rouge_l_f1_mean": 0.39238404365755797,
+      "context_tokens_mean": 1975.2740585774059,
+      "prompt_tokens_mean": 2500.979079497908
+    },
+    "full_context": {
+      "n": 478,
+      "token_f1_mean": 0.29994085309390683,
+      "rouge_l_f1_mean": 0.2772660131375102,
+      "context_tokens_mean": 3484.7217573221756,
+      "prompt_tokens_mean": 3449.3870292887027
+    },
+    "learned_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4604899111533357,
+      "rouge_l_f1_mean": 0.4279768636205604,
+      "context_tokens_mean": 679.1485355648535,
+      "prompt_tokens_mean": 961.1548117154812
+    },
+    "recency_n25": {
+      "n": 478,
+      "token_f1_mean": 0.4097988557661891,
+      "rouge_l_f1_mean": 0.3784757632788847,
+      "context_tokens_mean": 2570.644351464435,
+      "prompt_tokens_mean": 3140.13179916318
+    },
+    "semantic_rag_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4754164391298304,
+      "rouge_l_f1_mean": 0.4418345426577919,
+      "context_tokens_mean": 567.092050209205,
+      "prompt_tokens_mean": 816.3807531380753
+    }
+  },
+  "mistralai--Mistral-7B-Instruct-v0.3": {
+    "bm25_k5": {
+      "n": 478,
+      "token_f1_mean": 0.41691956233383326,
+      "rouge_l_f1_mean": 0.37662891486425626,
+      "context_tokens_mean": 875.1025104602511,
+      "prompt_tokens_mean": 1149.3598326359834
+    },
+    "discharge_only": {
+      "n": 478,
+      "token_f1_mean": 0.5446044700406708,
+      "rouge_l_f1_mean": 0.5091105622541905,
+      "context_tokens_mean": 1975.2740585774059,
+      "prompt_tokens_mean": 2582.694560669456
+    },
+    "full_context": {
+      "n": 478,
+      "token_f1_mean": 0.3864561287015851,
+      "rouge_l_f1_mean": 0.3551727382280942,
+      "context_tokens_mean": 3484.7217573221756,
+      "prompt_tokens_mean": 4686.667364016736
+    },
+    "learned_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4856723671893593,
+      "rouge_l_f1_mean": 0.4467688013295011,
+      "context_tokens_mean": 679.1485355648535,
+      "prompt_tokens_mean": 915.6066945606694
+    },
+    "recency_n25": {
+      "n": 478,
+      "token_f1_mean": 0.5250257707263506,
+      "rouge_l_f1_mean": 0.48711446773643763,
+      "context_tokens_mean": 2570.644351464435,
+      "prompt_tokens_mean": 3386.020920502092
+    },
+    "semantic_rag_k5": {
+      "n": 478,
+      "token_f1_mean": 0.48027530281512665,
+      "rouge_l_f1_mean": 0.44494964954656574,
+      "context_tokens_mean": 567.092050209205,
+      "prompt_tokens_mean": 782.2071129707113
+    }
+  },
+  "o4-mini": {
+    "bm25_k5": {
+      "n": 478,
+      "token_f1_mean": 0.39979491883939006,
+      "rouge_l_f1_mean": 0.36307281829839044,
+      "context_tokens_mean": 875.1025104602511,
+      "prompt_tokens_mean": 950.8535564853556
+    },
+    "discharge_only": {
+      "n": 478,
+      "token_f1_mean": 0.4936959146907752,
+      "rouge_l_f1_mean": 0.4551602917278828,
+      "context_tokens_mean": 1975.2740585774059,
+      "prompt_tokens_mean": 2051.5962343096235
+    },
+    "full_context": {
+      "n": 478,
+      "token_f1_mean": 0.37885728243141503,
+      "rouge_l_f1_mean": 0.3458668976902787,
+      "context_tokens_mean": 3484.7217573221756,
+      "prompt_tokens_mean": 3560.8765690376567
+    },
+    "learned_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4677567408465908,
+      "rouge_l_f1_mean": 0.4286454689802823,
+      "context_tokens_mean": 679.1485355648535,
+      "prompt_tokens_mean": 755.1506276150627
+    },
+    "recency_n25": {
+      "n": 478,
+      "token_f1_mean": 0.48652466803934674,
+      "rouge_l_f1_mean": 0.4486298015506756,
+      "context_tokens_mean": 2570.644351464435,
+      "prompt_tokens_mean": 2646.10460251046
+    },
+    "semantic_rag_k5": {
+      "n": 478,
+      "token_f1_mean": 0.4690239196420987,
+      "rouge_l_f1_mean": 0.4274079049360993,
+      "context_tokens_mean": 567.092050209205,
+      "prompt_tokens_mean": 642.9309623430962
+    }
+  }
+}
