@@ -34,7 +34,7 @@ Priority order: make the first four first. Together they cover the thesis, retri
 
 - **X-axis:** K (chunks retrieved): 1, 3, 5, 10
 - **Y-axis:** Mean Recall@K
-- **Two lines:** Baseline (130 features) vs. Enriched (146 features)
+- **Two lines:** Baseline (130 features) vs. Enriched (166 features)
 - **Known values:**
   - Baseline: K=1→0.45, K=3→0.71, K=5→0.84, K=10→0.96
   - Enriched:  K=1→0.41, K=3→0.77, K=5→0.88, K=10→0.96

@@ -2,13 +2,13 @@
 
 **Owner:** Niki Yoon
 **Started:** March 12, 2026
-**Status:** Planning
+**Status:** Complete (130 → 166 features; model retrained 3/14/26)
 
 ---
 
 ## Goal
 
-Improve the learned chunk selector (L1 logistic regression) by adding temporal and clinical-salience features to the feature vector. The current 130-dim vector captures lexical/semantic similarity and section structure, but has no sense of *when* a chunk happened or whether it contains clinically critical information.
+Improve the learned chunk selector (L1 logistic regression) by adding temporal and clinical-salience features to the feature vector. The original 130-dim vector captured lexical/semantic similarity and section structure, but had no sense of *when* a chunk happened or whether it contains clinically critical information. Feature enrichment expanded this to 166 dimensions; the model was retrained on 3/14/26 and all evaluation results reflect the 166-feature model.
 
 The hypothesis: chunks describing recent events (within 24h of discharge) and chunks flagging abnormal lab values or critical clinical events are more likely to be answer-supporting, regardless of keyword overlap with the question.
 
@@ -179,7 +179,7 @@ Run with each group individually to isolate contribution:
 
 ## Phase 2: Dual QA Source Comparison
 
-**Status:** In progress (2026-03-12)
+**Status:** Complete (2026-03-12)
 
 ### Motivation
 

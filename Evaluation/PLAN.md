@@ -61,7 +61,7 @@ Embed each chunk using a sentence-transformer model. For each question, retrieve
 
 Score all chunks with the trained L1-regularized logistic regression model (`Logreg/`) and select the top-K by predicted usefulness probability.
 
-The selector is trained on (question, chunk) pairs with weak supervision: a chunk is labeled positive if token F1 between the chunk text and the gold answer exceeds 0.15. The model uses a 130-dimensional feature vector combining:
+The selector is trained on (question, chunk) pairs with weak supervision: a chunk is labeled positive if token F1 between the chunk text and the gold answer exceeds 0.15. The model uses a 166-dimensional feature vector combining:
 - Lexical similarity (TF-IDF cosine, token overlap)
 - Semantic similarity (frozen `all-MiniLM-L6-v2` embeddings)
 - Structural signals (chunk position, log length)

@@ -44,7 +44,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 - [x] **QA generation pipeline** — Async gpt-4o generation of grounded QA pairs with per-patient caching and resumability (`Generation/`)
 - [x] **Chunking** — Section-based splitting on MIMIC-IV headers with automatic fallback to fixed-size overlapping token windows; oversized sections sub-split (`chunker.py`)
 - [x] **Weak labeling** — Token F1 overlap between chunk text and gold answer; threshold at F1 ≥ 0.15 (`labeler.py`)
-- [x] **Feature extraction** — 130-dim feature vector: lexical similarity (TF-IDF cosine, token overlap), semantic similarity (sentence-transformer embeddings), structural signals (position, log length), section one-hot (17), question-type one-hot (6), section × question-type interactions (102) (`features.py`)
+- [x] **Feature extraction** — 166-dim feature vector: lexical similarity (TF-IDF cosine, token overlap), semantic similarity (sentence-transformer embeddings), structural signals (position, log length), section one-hot (17), question-type one-hot (6), section × question-type interactions (102), temporal proximity (time-to-discharge, temporal buckets), clinical salience flags (ICU transfer, intubation, abnormal labs), question-type × signal interactions (`features.py`)
 - [x] **L1 logistic regression training** — Patient-level train/val split, negative sampling, class-weight balancing, bulk embedding computation (`train.py`)
 - [x] **Inference selector** — Load trained model, score chunks, return top-K (`selector.py`)
 - [x] **CLI** — `train`, `evaluate`, `select` subcommands (`run.py`)
@@ -53,7 +53,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 - [x] **Diagnostic plots** — Feature importance, ROC curve, precision-recall curve, Recall@K curve, score distribution
 - [x] **Downstream LLM evaluation pipeline** *(Nick)* — 6 retrieval strategies (discharge-only, full-context, recency, BM25, semantic RAG, learned) evaluated on frozen o4-mini with token F1 and ROUGE-L scoring (`Evaluation/`)
 - [x] **Phase 1 core comparison results** *(Nick)* — 200-patient dev set, 1,000 QA pairs, 4,096-token budget; learned selector achieves 0.406 token F1 with 72% fewer tokens than full-context
-- [x] **Feature enrichment** *(Niki)* — 130 → 146 feature dims: temporal marker detection, clinical salience flags (ICU/intubation/arrest), abnormal lab flags, time-to-discharge proximity, question-type × signal interactions; Recall@3 +6.3pts, Recall@5 +3.8pts vs baseline
+- [x] **Feature enrichment** *(Niki)* — 130 → 166 feature dims: temporal marker detection, clinical salience flags (ICU/intubation/arrest), abnormal lab flags, time-to-discharge proximity, question-type × signal interactions, precision features; Recall@3 +6.3pts, Recall@5 +3.8pts vs baseline
 - [x] **Response caching infrastructure** *(Nick)* — SHA-256 disk cache in `data/results/cache/` for $0 re-runs; reasoning-model detection for o-series API quirks (`max_completion_tokens`, no `temperature`)
 - [x] **Git LFS data sharing** *(Nick)* — `patient_timelines.json` and `qa_pairs.json` tracked via LFS so collaborators don't need to regenerate
 - [x] **Per-difficulty breakdown** *(Nick)* — Metrics split by question difficulty (easy/medium/hard) implemented in `analysis.py`
@@ -83,7 +83,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
 | — Score with ROUGE-L, token F1 | Nick | Done |
 | — LLM-as-judge scoring | Nick | Done (3/13/26) — all 30 cells scored |
-| **Multi-model generalization (Phase 2)** | Nick | In progress |
+| **Multi-model generalization (Phase 2)** | Nick | **Done (3/13/26)** |
 | — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
 | — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Done — all 3 models complete |
 | — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | Done — both complete |
@@ -169,14 +169,14 @@ Evaluated on 70 physician-reviewed patients (478 correct QA pairs, zero overlap 
 
 On the validation set (patient-level split, no leakage), the learned selector achieves strong retrieval performance under small budgets:
 
-| K | Baseline (130 feat) | Enriched (146 feat) | Delta |
+| K | Baseline (130 feat) | Enriched (166 feat) | Delta |
 |---|---|---|---|
 | 1 | 0.45 | 0.41 | -0.04 |
 | 3 | 0.71 | 0.77 | **+0.06** |
 | 5 | 0.84 | 0.88 | **+0.04** |
 | 10 | 0.96 | 0.96 | ~0 |
 
-Recall improves sharply from K=1 to K=5, indicating that high-scoring chunks are preferentially relevant rather than the model simply classifying most chunks as negative.
+Recall improves sharply from K=1 to K=5, indicating that high-scoring chunks are preferentially relevant rather than the model simply classifying most chunks as negative. The current production model uses the full 166-feature vector (after all enrichment phases).
 
 **Limitations of current results:** These evaluate retrieval quality using overlap-derived "positives" as ground truth and report validation performance only. The final evaluation will (i) use clinician-reviewed QA benchmarks (EHRNoteQA) and (ii) compare a downstream small LLM baseline to the same model augmented with learned retrieval, isolating gains attributable to improved context selection.
 
@@ -215,7 +215,7 @@ A single global scoring function:
 p(y=1 | q, c) = σ(w⊤ φ(q, c))
 ```
 
-where φ(q, c) is a 160-dimensional feature vector for (question q, chunk c), capturing lexical/semantic similarity, section structure, temporal proximity, clinical salience, and cross-feature interactions. The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
+where φ(q, c) is a 166-dimensional feature vector for (question q, chunk c), capturing lexical/semantic similarity, section structure, temporal proximity, clinical salience, and cross-feature interactions. The model is trained once on thousands of (question, chunk) pairs. At test time it applies the same learned weights to new questions and new patients.
 
 ---
 
@@ -337,9 +337,9 @@ procedure, other
 
 ---
 
-## Feature Vector (160 dimensions)
+## Feature Vector (166 dimensions)
 
-Every `(question, chunk)` pair is converted into a 160-dimensional float32 vector. The L1 penalty drives most weights to zero; only the most informative features survive. The vector has evolved through feature enrichment (see `Progress/FEATURE_ENRICHMENT.md`).
+Every `(question, chunk)` pair is converted into a 166-dimensional float32 vector. The L1 penalty drives most weights to zero; only the most informative features survive. The vector has evolved through feature enrichment (see `Progress/FEATURE_ENRICHMENT.md`).
 
 ### Scalar features (5)
 
@@ -472,7 +472,7 @@ Logreg/                      Phase 1a — learned chunk selector
 ├── data_loader.py           loads + joins timelines and QA pairs
 ├── chunker.py               section-based and fixed-size chunking
 ├── labeler.py               weak binary labels via token F1 overlap
-├── features.py              160-dim feature extraction (Groups A/B/C/D)
+├── features.py              166-dim feature extraction (Groups A/B/C/D)
 ├── train.py                 L1 logistic regression training
 ├── selector.py              inference: score chunks, return top-K
 └── run.py                   CLI: train / evaluate / select

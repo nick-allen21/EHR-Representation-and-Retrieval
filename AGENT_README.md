@@ -207,7 +207,7 @@ When finishing a session or completing a TODO:
 | `Evaluation/llm_judge.py` | LLM-as-judge post-processing (gpt-4o rubric) |
 | `Evaluation/run_evaluation.py` | CLI orchestrator (OpenAI + HF model routing) |
 | `Evaluation/analysis.py` | Multi-model result aggregation, matrices, heatmaps |
-| `Logreg/` | Learned chunk selector (training + inference, 160-dim features) |
+| `Logreg/` | Learned chunk selector (training + inference, 166-dim features) |
 | `Preprocess/` | BigQuery → patient timelines |
 | `Generation/` | gpt-4o QA pair generation |
 | `scripts/` | FarmShare setup, SLURM batch jobs, smoke tests |

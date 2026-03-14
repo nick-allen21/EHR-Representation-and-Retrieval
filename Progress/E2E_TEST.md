@@ -82,8 +82,8 @@ Run the full evaluation pipeline end-to-end with 200 patients across all 5 model
 ## Phase 2: Physician-Verified QA Set Evaluation
 
 **Date:** March 13, 2026
-**Branch:** `nallen21/verified-qa-eval`
-**Status:** In progress — data ready, evaluation runs pending (FarmShare agent)
+**Branch:** `nallen21/verified-qa-eval` (merged to `main` on 3/14/26)
+**Status:** Complete — all 30/30 cells evaluated, LLM-as-judge scored, results committed
 
 ### Motivation
 
@@ -99,7 +99,7 @@ The Phase 1 E2E test used GPT-4o-generated QA pairs, creating a circular LLM-gen
 
 - [x] **Generated verified patient timelines** — `python -m Preprocess.run_pipeline --qa-csv data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.csv --output data/processed/patient_timelines_verified.json --format json` — 70 records written via BigQuery (discharge summaries, structured events, demographics, admissions, diagnoses, procedures, labs, prescriptions, vitals)
 - [x] **Verified data join** — 70/70 patients matched between timelines and QA; 478 correct QA pairs usable (28 physician-rejected pairs filtered by `correct == False` logic already in `run_evaluation.py`)
-- [x] **Created SLURM script for verified set** — `scripts/run_verified_eval.sbatch` (HF models) and `scripts/run_verified_openai.sh` (OpenAI models)
+- [x] **Created SLURM scripts for verified set** — `scripts/run_hf_eval_verified.sbatch` (HF models), `scripts/run_openai_eval_verified.sbatch` (OpenAI models), `scripts/run_all_learned_verified.sbatch` (learned strategy, all models)
 - [x] **Pushed all data and scripts to `nallen21/verified-qa-eval`** — no BigQuery access needed from here
 
 ### Evaluation runs (March 13–14, 2026)
@@ -183,7 +183,7 @@ The Phase 1 E2E test used GPT-4o-generated QA pairs, creating a circular LLM-gen
 - [x] LLM-as-judge scoring on all 30 files (gpt-4o, full 478 rows per file)
 - [x] summary.json and judge_rankings.json generated
 - [ ] Generate publication-quality plots (see Progress/PLOTS.md)
-- [ ] Final commit with all results
+- [x] Final commit with all results (pushed to `main` 3/14/26)
 
 ### Key data files (all committed, no BigQuery needed)
 

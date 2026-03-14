@@ -30,7 +30,7 @@ The matrix uses **5 models**. We originally dropped Llama because gated access w
 | gpt-4o-mini | `gpt-4o-mini` | 128k | OpenAI API | **Done (3/12/26)** — all 6 strategies |
 | Llama-3.1-8B-Instruct | `meta-llama/Llama-3.1-8B-Instruct` | 128k | HuggingFace (gated) | **Done (3/13/26)** — all 6 strategies |
 | Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` | 32k | HuggingFace | **Done (3/13/26)** — all 6 strategies |
-| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | **Done (3/13/26)** — all 6 strategies — waiting for GPU slot |
+| Phi-3-mini-4k-instruct | `microsoft/Phi-3-mini-4k-instruct` | **4k** | HuggingFace | **Done (3/13/26)** — all 6 strategies |
 
 **Narrative:** Retrieval strategy matters most when context is tight. Phi-3-mini-4k is the hero model — its 4k window exactly equals our token budget, maximizing variance across strategies. The spread from 4k (Phi-3) to 128k (Llama-3.1, gpt-4o-mini) shows whether the retrieval advantage holds across radically different context windows.
 
@@ -258,7 +258,7 @@ Step 7:  Run Llama-3.1-8B on FarmShare (fills row 3)                      ✓ DO
 Step 8:  Run Mistral-7B on FarmShare (fills row 4)                        ✓ DONE (3/13/26) — all 6 strategies
 Step 9:  Run Phi-3-mini-4k on FarmShare (fills row 5)                     ✓ DONE (3/13/26) — all 6 strategies
 Step 10: Create llm_judge.py + design prompt                              ✓ DONE (3/13/26)
-Step 11: Run LLM-as-judge on all result files (~$60)                      ← TODO (do not run yet)
+Step 11: Run LLM-as-judge on all result files                             ✓ DONE (3/13/26) — dev set (gpt-4o-mini); (3/14/26) — verified set (gpt-4o)
 Step 12: Update analysis.py + README.md matrix with final numbers         ✓ DONE (3/13/26) — 30/30 cells filled
 ```
 
@@ -493,29 +493,17 @@ scp -r nallen21@rice.stanford.edu:~/EHR-Representation-and-Retrieval/data/result
 **Start here:**
 
 1. Read this file top-to-bottom
-<<<<<<< HEAD
-2. Check SLURM job status: `squeue -u nallen21` and `sacct -u nallen21 -j 1491077`
-3. All 5 model rows are filled (30/30 cells) — matrix is complete
-4. Run LLM-as-judge on all result files to fill the judge-score column
-
-**LLM-as-judge current state (3/13/26):**
-- `Evaluation/llm_judge.py` fully implemented — conflict-resolved, two modes: normal (saves in-place) and `--dry-run` (fresh API calls, print only)
-- Pilot scores written (gpt-4o-mini): ~395 rows across full_context, semantic_rag_k5, learned_k5
-- Default judge model: gpt-4o. Pass `--judge-model gpt-4o-mini` for cheaper runs.
-- View current rankings instantly (free): `python -m Evaluation.llm_judge --rank-only`
-- Fresh spot-check (no saves): `python -m Evaluation.llm_judge --dry-run --limit 50`
-=======
 2. All 30 matrix cells filled (5 models × 6 strategies). Full end-to-end test completed 3/13/26.
-3. LLM-as-judge: 50–200 rows scored per file across all 30 cells. Rankings in `data/results/judge_rankings.json`
-4. To extend: `python -m Evaluation.llm_judge --files data/results/*__*.json --limit 1000`
-5. To view rankings (free): `python -m Evaluation.llm_judge --files data/results/*__*.json --rank-only`
+3. LLM-as-judge: all 30 dev-set files scored (gpt-4o-mini judge), all 30 verified-set files scored (gpt-4o judge, 478 rows each)
+4. Dev-set rankings in `data/results/judge_rankings.json`; verified-set rankings in `data/results/verified/judge_rankings.json`
+5. To view rankings (free): `python -m Evaluation.llm_judge --results-dir data/results --rank-only`
 
-**LLM-as-judge current state (3/13/26):**
-- All 30 model×strategy files scored (gpt-4o-mini judge)
-- Top strategies by mean score: o4-mini full_context (3.28), o4-mini semantic_rag (3.56), o4-mini learned (3.46)
-- Phi-3-mini-4k scores lowest (1.4–2.9) due to 4k context truncation
-- `_save_to_summary_json` warns for multi-model (summary.json aggregates by strategy, not model×strategy)
->>>>>>> 5beda65baccc39a6b900b0198f405d565b7054fa
+**LLM-as-judge current state (3/14/26):**
+- Dev set: all 30 model×strategy files scored (gpt-4o-mini judge, 50–245 rows per file)
+- Verified set: all 30 model×strategy files scored (gpt-4o judge, 478 rows per file, 10,940 total judgments)
+- Top dev-set strategies by mean score: o4-mini semantic_rag (3.56), o4-mini learned (3.46), o4-mini recency (3.34)
+- Top verified-set strategies by judge: o4-mini recency (4.40), o4-mini discharge_only (4.38), gpt-4o-mini recency (4.32)
+- Phi-3-mini-4k scores lowest on both sets due to 4k context truncation
 
 **Key invariants to preserve:**
 - Cache key format: `SHA256(json({model, messages}))` — identical in both `llm_runner.py` and `hf_runner.py`
