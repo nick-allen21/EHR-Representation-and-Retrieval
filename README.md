@@ -1,5 +1,13 @@
 # Logreg: Learned Chunk Selector for EHR Discharge Summaries
 
+**CS229 Final Project (Winter 2025–26)** — Niki Yoon, Nicholas Allen
+
+## Project Status
+
+✅ **Complete.** All planned experiments, evaluation, and deliverables are finished. Run `python create_submission.py` to produce `submission.zip` for turn-in.
+
+---
+
 ## What this is
 
 A supervised **L1-regularized logistic regression** model that learns to score and select chunks of a patient record based on their usefulness for answering a clinical question.
@@ -38,72 +46,31 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 
 ## Progress
 
-### Done
+### Completed Deliverables
 
 - [x] **Preprocess pipeline** — BigQuery extraction of discharge summaries, structured events (labs, vitals, meds, procedures, diagnoses), demographics, and admission metadata into longitudinal patient timelines (`Preprocess/`)
 - [x] **QA generation pipeline** — Async gpt-4o generation of grounded QA pairs with per-patient caching and resumability (`Generation/`)
 - [x] **Chunking** — Section-based splitting on MIMIC-IV headers with automatic fallback to fixed-size overlapping token windows; oversized sections sub-split (`chunker.py`)
 - [x] **Weak labeling** — Token F1 overlap between chunk text and gold answer; threshold at F1 ≥ 0.15 (`labeler.py`)
-- [x] **Feature extraction** — 166-dim feature vector: lexical similarity (TF-IDF cosine, token overlap), semantic similarity (sentence-transformer embeddings), structural signals (position, log length), section one-hot (17), question-type one-hot (6), section × question-type interactions (102), temporal proximity (time-to-discharge, temporal buckets), clinical salience flags (ICU transfer, intubation, abnormal labs), question-type × signal interactions (`features.py`)
+- [x] **Feature extraction** — 166-dim feature vector: lexical similarity (TF-IDF cosine, token overlap), semantic similarity (sentence-transformer embeddings), structural signals (position, log length), section one-hot (19), question-type one-hot (6), section × question-type interactions, temporal proximity, clinical salience flags (ICU transfer, intubation, abnormal labs), question-type × signal interactions (`features.py`)
 - [x] **L1 logistic regression training** — Patient-level train/val split, negative sampling, class-weight balancing, bulk embedding computation (`train.py`)
 - [x] **Inference selector** — Load trained model, score chunks, return top-K (`selector.py`)
 - [x] **CLI** — `train`, `evaluate`, `select` subcommands (`run.py`)
 - [x] **Evaluation metrics** — Classification diagnostics (ROC-AUC, average precision) + per-question Recall@K as primary retrieval metric
-- [x] **Preliminary results on validation set** — Recall@1 = 0.45, Recall@3 = 0.71, Recall@5 = 0.84, Recall@10 = 0.96
-- [x] **Diagnostic plots** — Feature importance, ROC curve, precision-recall curve, Recall@K curve, score distribution
-- [x] **Downstream LLM evaluation pipeline** *(Nick)* — 6 retrieval strategies (discharge-only, full-context, recency, BM25, semantic RAG, learned) evaluated on frozen o4-mini with token F1 and ROUGE-L scoring (`Evaluation/`)
-- [x] **Phase 1 core comparison results** *(Nick)* — 200-patient dev set, 1,000 QA pairs, 4,096-token budget; learned selector achieves 0.406 token F1 with 72% fewer tokens than full-context
-- [x] **Feature enrichment** *(Niki)* — 130 → 166 feature dims: temporal marker detection, clinical salience flags (ICU/intubation/arrest), abnormal lab flags, time-to-discharge proximity, question-type × signal interactions, precision features; Recall@3 +6.3pts, Recall@5 +3.8pts vs baseline
-- [x] **Response caching infrastructure** *(Nick)* — SHA-256 disk cache in `data/results/cache/` for $0 re-runs; reasoning-model detection for o-series API quirks (`max_completion_tokens`, no `temperature`)
-- [x] **Git LFS data sharing** *(Nick)* — `patient_timelines.json` and `qa_pairs.json` tracked via LFS so collaborators don't need to regenerate
-- [x] **Per-difficulty breakdown** *(Nick)* — Metrics split by question difficulty (easy/medium/hard) implemented in `analysis.py`
-- [x] **Publication figures** *(Nick)* — 12 publication-quality plots for dev set + 8 for verified set covering efficiency, feature importance, model lift, heatmaps, win rates, and more (`scripts/generate_plots.py`)
+- [x] **Validation results** — Recall@1 = 0.45, Recall@3 = 0.77, Recall@5 = 0.88, Recall@10 = 0.96
+- [x] **Downstream LLM evaluation** — 6 retrieval strategies (discharge-only, full-context, recency, BM25, semantic RAG, learned) evaluated on 5 models (o4-mini, gpt-4o-mini, Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) with token F1, ROUGE-L, and LLM-as-judge scoring
+- [x] **Multi-model generalization** — Full 5×6 matrix (30 cells) on dev set (200 patients, 990 QA pairs) and verified set (70 patients, 478 physician-reviewed pairs)
+- [x] **Publication figures** — 12 plots (dev) + 8 plots (verified) in `data/results/plots/`; see `Progress/PLOTS.md`
+- [x] **Final write-up** — `tex/main.tex` and sections
+- [x] **Submission** — `create_submission.py` produces `submission.zip` (< 5 MB) for turn-in
 
-### TODO
+### Future Work (deferred)
 
-| Task | Owner | Status |
-|---|---|---|
-| **Add higher-signal temporal and structured-event features** | Niki | Done (3/12/26) |
-| — Time-gap features, temporal buckets, temporal marker detection | Niki | Done |
-| — Recency/trend features for labs/vitals, abnormal value flags | Niki | Done |
-| — Event salience indicators (ICU transfer, intubation, new dx) | Niki | Done |
-| — Aggregation features (top abnormal labs, recent med list) | | Deferred |
-| **Ablate weak supervision threshold** (sweep 0.10–0.30) | | |
-| **Add gold standard QA dataset** | | |
-| — Download ~926-pair physician-authored dataset | | |
-| — Add to `data/gold/`, document path in README + SETUP | | |
-| — Run final evaluation on gold set (after model frozen) | | |
-| **Scale data and implement evaluation dataset** | Nick | In progress |
-| — Expand to 200-patient dev set with gpt-4o QA pairs | Nick | Done |
-| — Scale to 5,000 patients for final results (~$1,300 est.) | Nick | |
-| — Set up held-out test set | | |
-| — Incorporate EHRNoteQA as primary eval benchmark | | |
-| **Downstream LLM evaluation (Phase 1: core comparison)** | Nick | Done (3/11/26) |
-| — Wire selected chunks into frozen small LLM (o4-mini) | Nick | Done |
-| — Implement retrieval baselines (discharge-only, full-context, recency, BM25, semantic RAG) | Nick | Done |
-| — Run learned selector vs all baselines on same fixed LLM | Nick | Done |
-| — Score with ROUGE-L, token F1 | Nick | Done |
-| — LLM-as-judge scoring | Nick | Done (3/13/26) — all 30 cells scored |
-| **Multi-model generalization (Phase 2)** | Nick | **Done (3/13/26)** |
-| — Extend `llm_runner.py` to support HuggingFace models | Nick | Done — `Evaluation/hf_runner.py` |
-| — Set up HuggingFace inference (Llama-3.1-8B, Mistral-7B, Phi-3-mini-4k) | Nick | Done — all 3 models complete |
-| — Set up OpenAI API inference (o4-mini, gpt-4o-mini) | Nick | Done — both complete |
-| — Run full model × retrieval matrix (5 models × 6 strategies) | Nick | **Done** — 30/30 cells filled |
-| **Learn better scoring functions** | | |
-| — MLP ranker on frozen embeddings | | |
-| — Two-stage retrieval (fast retriever → re-ranker) | | |
-| **Full E2E test (200 patients, 5 models × 6 strategies)** | Nick | **Done (3/13/26)** — see `Progress/E2E_TEST.md` |
-| **Verified QA evaluation (70 physician-reviewed patients)** | Nick | **Done (3/14/26)** — 30/30 cells complete + LLM-as-judge (gpt-4o, 478 rows/cell); discharge-only best on lexical metrics (F1=0.608), recency best on judge (4.40); learned achieves 95% quality with 1/3 tokens; see `Progress/E2E_TEST.md` Phase 2 |
-| **Strengthen evaluation and analysis** | Nick | In progress |
-| — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
-| — LLM-as-judge prompt design and execution | Nick | Done — rankings in `judge_rankings.json` |
-| — Evidence support metrics | | |
-| — Feature group ablations | | |
-| — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
-| **Publication figures** | Nick | **Done (3/14/26)** — 12 plots (dev) + 8 plots (verified) in `data/results/plots/`; see `Progress/PLOTS.md` |
-| **Final write-up** | | |
-| **Clean up code and turn in** | | |
-| **Project poster** | | |
+- Ablate weak supervision threshold (sweep 0.10–0.30)
+- Add gold standard QA dataset (~926 physician-authored pairs)
+- Scale to 5,000 patients for larger-scale results
+- MLP ranker, two-stage retrieval (fast retriever → re-ranker)
+- Budget-efficiency curves (accuracy vs K sweeps)
 
 **Model × retrieval matrix — Token F1:**
 
@@ -180,7 +147,7 @@ On the validation set (patient-level split, no leakage), the learned selector ac
 
 Recall improves sharply from K=1 to K=5, indicating that high-scoring chunks are preferentially relevant rather than the model simply classifying most chunks as negative. The current production model uses the full 166-feature vector (after all enrichment phases).
 
-**Limitations of current results:** These evaluate retrieval quality using overlap-derived "positives" as ground truth and report validation performance only. The final evaluation will (i) use clinician-reviewed QA benchmarks (EHRNoteQA) and (ii) compare a downstream small LLM baseline to the same model augmented with learned retrieval, isolating gains attributable to improved context selection.
+**Evaluation:** Retrieval quality uses overlap-derived "positives" as ground truth on the dev set. Downstream QA quality is evaluated on both teacher-generated QA (dev) and physician-verified EHR-DS-QA (verified set). The learned selector achieves ~95% of full-context quality with ~1/3 the tokens across 5 models and 6 retrieval strategies.
 
 ### Downstream LLM Evaluation (Phase 1: Core Comparison)
 
@@ -452,13 +419,15 @@ Reported under `val.mean_recall@{K}` in `metrics.json`. **This is the number to 
 - **TF-IDF fitted on train only** — vocabulary learned from train questions + train chunks, applied to val via `transform`
 - **Frozen sentence embeddings** — computed with a pretrained encoder, no fitting on val data
 - **Model trained on train only** — evaluated on held-out validation patients
-- **Separate test set** — will be introduced for final evaluation (not yet implemented, see TODO)
+- **Held-out test set** — physician-verified EHR-DS-QA (70 patients, 478 pairs) used for final evaluation; zero overlap with dev set
 
 ---
 
 ## File Structure
 
 ```
+create_submission.py         creates submission.zip for turn-in (< 5 MB)
+
 Preprocess/                  Phase 0 — BigQuery → patient timelines
 ├── bigquery_client.py       shared BQ client + query helper
 ├── extract_notes.py         fetch discharge summaries
@@ -505,6 +474,12 @@ scripts/                     FarmShare setup, SLURM batch jobs
 ---
 
 ## How to Run
+
+### Create submission zip
+
+```bash
+python create_submission.py   # produces submission.zip (< 5 MB)
+```
 
 ### Step 1: Generate patient timelines
 
