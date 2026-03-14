@@ -1,0 +1,91 @@
+% Experiments, Results, and Discussion
+% (Fill in results/tables/plots; the design below is final-report ready.)
+
+\paragraph{Evaluation overview.}
+We evaluate our system at three levels: (i) \textbf{retrieval quality} of selected context under strict budgets, (ii) \textbf{automatic answer quality} of a frozen small LLM given that context (token F1, ROUGE-L), and (iii) \textbf{rubric-based LLM judging} that compares generated answers to a gold answer and assigns a 1--5 score. Retrieval is evaluated against \emph{weak chunk-level labels} (derived from answer overlap), while answer quality and judging are evaluated against \emph{gold answers} (clinician-reviewed when available).
+
+\paragraph{Datasets.}
+\begin{itemize}
+  \item \textbf{Training supervision:} teacher-generated QA pairs over MIMIC-derived patient timelines (notes + time-stamped structured events). These QA pairs provide scalable supervision but may contain bias or noise.
+  \item \textbf{Primary benchmark evaluation:} \textbf{EHRNoteQA v1.0.1} (962 clinician-reviewed QA pairs over MIMIC-IV discharge summaries) \citep{PhysioNet-ehr-notes-qa-llms-1.0.1}. This dataset is used for our strongest claims about clinical QA performance.
+  \item \textbf{Internal validation:} held-out patient split from teacher-generated QA supervision, used for debugging and ablations.
+\end{itemize}
+
+\paragraph{Systems compared (context strategies).}
+For each question, we run the \emph{same frozen small LLM} with identical prompting, varying \emph{only} the context selection strategy:
+\begin{itemize}
+  \item \textbf{Full/maximum context:} serialize as much of the patient timeline as the budget allows.
+  \item \textbf{Semantic RAG:} retrieve top-$K$ chunks by embedding similarity.
+  \item \textbf{Lexical retrieval:} BM25/TF--IDF top-$K$ chunks.
+  \item \textbf{Recency/heuristics:} recent events or late-note chunks.
+  \item \textbf{Learned selector (ours):} L1 logistic regression chunk scorer selecting top-$K$.
+\end{itemize}
+All strategies operate over a common candidate chunk pool to ensure fair comparison.
+
+\paragraph{Metric 1: per-question Recall@K (weak-label retrieval diagnostic).}
+We measure budgeted evidence retrieval with per-question \textbf{Recall@K}. For each question $q$ and its candidate chunk set $X$, we rank chunks, take the top-$K$, and count how many are \emph{positive} under our weak labeler (answer--chunk token-F1 $\ge \tau$). We compute
+\[
+\mathrm{Recall@K}=\frac{\#\text{positives in top-$K$}}{\#\text{positives in }X}
+\]
+and average over questions. We report $K\in\{1,3,5,10\}$; this is a retrieval diagnostic since positives are proxy labels, not clinician-annotated evidence spans.
+
+\paragraph{Metric 2: automatic answer similarity (gold-answer F1/ROUGE).}
+We evaluate downstream QA quality by comparing the small LLM's generated answer to the dataset gold answer:
+\begin{itemize}
+  \item \textbf{Token F1}: bag-of-tokens overlap F1 between prediction and gold answer.
+  \item \textbf{ROUGE-L}: longest-common-subsequence ROUGE for longer answers.
+\end{itemize}
+These metrics are computed on (a) teacher-generated QA for internal experiments and (b) clinician-reviewed EHRNoteQA answers for benchmark evaluation \citep{PhysioNet-ehr-notes-qa-llms-1.0.1}. EHRNoteQA results are used for our primary claims.
+
+\paragraph{Metric 3: rubric-based LLM judging (gold-referenced).}
+Automatic overlap metrics can under-reward semantically correct paraphrases and can be brittle for list-style answers. Therefore we additionally use an \textbf{LLM-as-judge} evaluation: for each question, we provide the judge model with (i) the question, (ii) the gold answer, and (iii) a candidate generated answer produced by the small LLM under a given context strategy. The judge assigns a \textbf{1--5 score} reflecting correctness and completeness relative to the gold answer (with explicit instructions to ignore style and to focus on factual agreement and coverage). We summarize judge results as:
+\begin{itemize}
+  \item \textbf{Mean score} per strategy (and distribution).
+  \item \textbf{Win rate / pairwise wins}: for each pair of strategies, the fraction of questions where one strategy receives a higher score than the other.
+\end{itemize}
+This evaluation directly measures whether our learned selector improves the small model's answers compared to competing retrieval strategies, using the same gold answer reference.
+
+
+\subsection*{Discussion:}
+
+    \paragraph{The model is learning document structure, not just similarity.} A key finding is that the learned selector behaves differently than semantic RAG. Semantic RAG ranks chunks primarily by embedding similarity to the question (effectively relying on a single signal analogous to \texttt{embed\_sim}). In contrast, our L1 logistic regression assigns most of its effective weight mass to \emph{structural signals}: section identity and section--question interactions account for the majority of active weight (approximately 79\% combined in our current run). This indicates that the model has learned that \emph{where} information appears in a discharge summary often predicts relevance more strongly than surface lexical or semantic overlap.
+    \paragraph{Structural cues in messy data. }We also observe that the model begins to exploit patterns that are difficult for pure similarity retrieval to capture reliably. For example, dosage-like tokens (e.g., mg'', qhs'', bid'') are strongly associated with medication questions, even when the note does not explicitly frame the content as a medication statement. In real discharge summaries, important facts are often presented in terse, semi-structured forms (lists, abbreviated lines) rather than in well-formed sentences (e.g., not always The medication we administered was ...''). A section-aware selector can exploit these formatting and locality cues, which helps when note structure is inconsistent or headers are incomplete
+    \paragraph{Similarity features. }While similarity features remain important, they are not dominant: raw similarity signals (TF--IDF similarity and embedding similarity) contribute a smaller fraction of active weight (roughly 17.6\% in our current analysis), with \texttt{embed\_sim} alone representing the core of the semantic RAG baseline. Our learned selector outperforms semantic RAG in part because it learns to down-weight sections that commonly contain semantically similar but non-answer text (e.g., vitals sections that mention a drug name without providing the discharge medication list).
+    \paragraph{Limitation of data. }At scale, clinical QA over EHRs has an unavoidable circularity problem: we want to learn “which chunks lead to the best answer,” but the ideal training signal would require clinicians to annotate (or rank) which exact pieces of the record were necessary and sufficient for each answer. Such evidence attribution is expensive, and most available datasets provide only question–answer pairs, not grounded evidence spans or clinician-ranked relevance. Our current supervision is therefore \emph{weak}: we label chunks by token overlap with the gold answer and do not observe human judgments of chunk usefulness. This introduces label noise and can bias the selector toward surface form matches. This points towards a common problem, but especially so in the healthcare space: high-quality, labeled data (not only the QA pairs, but also the evidence labeled as useful or not useful) that can lead to better interpretability.  
+    \paragraph{}Although we use a stronger model to generate QA supervision, this does not eliminate bias or hallucination risk. A teacher may omit items in lists, prefer certain phrasing, or generate questions that are easier for retrieval than real clinician questions. For this reason, our strongest claims rely on clinician-reviewed benchmarks (e.g., EHRNoteQA) and we treat teacher-generated QA primarily as a scalable training substrate rather than ground truth.
+
+
+% ---------------- Figure/Table placeholders ----------------
+% \begin{figure}[t]
+%   \centering
+%   \includegraphics[width=0.9\linewidth]{figures/recall_at_k.png}
+%   \caption{Per-question Recall@K vs K for baselines and learned selector (weak-label retrieval diagnostic).}
+% \end{figure}
+%
+% \begin{table}[t]
+%   \centering
+%   \begin{tabular}{lcc}
+%     \toprule
+%     Method & F1 & ROUGE-L \\
+%     \midrule
+%     Small LLM + Semantic RAG &  &  \\
+%     Small LLM + Full context &  &  \\
+%     Small LLM + Learned Selector (ours) &  &  \\
+%     \bottomrule
+%   \end{tabular}
+%   \caption{Downstream QA performance on EHRNoteQA v1.0.1 \citep{PhysioNet-ehr-notes-qa-llms-1.0.1}.}
+% \end{table}
+%
+% \begin{table}[t]
+%   \centering
+%   \begin{tabular}{lcc}
+%     \toprule
+%     Method & Mean judge score (1--5) & Win rate vs baseline \\
+%     \midrule
+%     Semantic RAG &  &  \\
+%     Full context &  &  \\
+%     Learned Selector (ours) &  &  \\
+%     \bottomrule
+%   \end{tabular}
+%   \caption{LLM-as-judge evaluation referenced to gold answers (1--5 rubric).}
+% \end{table}
