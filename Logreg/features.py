@@ -19,9 +19,9 @@ Feature vector layout (F dimensions total):
   [11]      is_within_1week     — event occurred within 7 days of discharge
   [12]      has_no_timestamp    — 1 for note-section chunks (no embedded timestamp)
 
-  [13:30]   sec_*              — one-hot section category (17 categories)
-  [30:36]   qt_*               — one-hot question type  (6 categories)
-  [36:138]  int_*_*            — section × question_type interactions (102 dims)
+  [13:32]   sec_*              — one-hot section category (19 categories)
+  [32:38]   qt_*               — one-hot question type  (6 categories)
+  [38:152]  int_*_*            — section × question_type interactions (114 dims)
 
   Group C — new signal × question-type interactions (8 dims):
   [138]     int_abnormal_lab_x_labs
@@ -41,7 +41,7 @@ Feature vector layout (F dimensions total):
   [150]     has_discharge_labs_hdr   — chunk header is "Discharge Labs" / "LABS ON DISCHARGE"
   [151]     has_admission_labs_hdr   — chunk header is "Labs on Admission" / "LABS ON ADMISSION"
 
-Total: 5 + 4 + 4 + 17 + 6 + 102 + 8 + 6 = 152 features
+Total: 5 + 4 + 4 + 19 + 6 + 114 + 8 + 6 = 166 features
 
 Temporal metadata is passed via chunk["_dischtime"] (an ISO datetime string,
 e.g. "2180-06-27 14:30:00"). Set by build_dataset() and selector.select().
