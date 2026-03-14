@@ -2,6 +2,7 @@
 
 Usage:
     python -m Preprocess.run_pipeline [--format parquet|json] [--limit N]
+    python -m Preprocess.run_pipeline --qa-csv data/physionet.org/.../verified.csv --output data/processed/patient_timelines_verified.json
 """
 
 import argparse
@@ -46,9 +47,25 @@ def main():
         default=None,
         help="Process only the first N QA rows (useful for testing)",
     )
+    parser.add_argument(
+        "--qa-csv",
+        type=Path,
+        default=None,
+        help="Override QA CSV path (default: from config.yaml)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Override output file path (default: data/processed/patient_timelines.{format})",
+    )
     args = parser.parse_args()
 
     config = load_config()
+
+    if args.qa_csv:
+        config["data"]["ehr_ds_qa_csv"] = str(args.qa_csv)
+
     client = get_client(config)
 
     out_format = args.format or config["pipeline"]["output_format"]
@@ -59,7 +76,12 @@ def main():
         config=config, client=client, limit=args.limit
     )
 
-    if out_format == "json":
+    if args.output:
+        out_path = args.output
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(records, f, indent=2, default=_json_serializer)
+    elif out_format == "json":
         out_path = out_dir / "patient_timelines.json"
         with open(out_path, "w") as f:
             json.dump(records, f, indent=2, default=_json_serializer)
