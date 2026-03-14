@@ -6,11 +6,46 @@ Feature vector layout (F dimensions total):
   [2]       lexical_overlap    — fraction of question tokens found in chunk
   [3]       position           — normalized chunk position in note [0, 1]
   [4]       log_length         — log(1 + whitespace token count of chunk)
-  [5:22]    sec_*              — one-hot section category (17 categories)
-  [22:28]   qt_*               — one-hot question type  (6 categories)
-  [28:28+17*6] int_*_*         — section × question_type interactions (102 dims)
 
-Total: 5 + 17 + 6 + 102 = 130 features
+  Group A — text-signal features (computed from chunk text):
+  [5]       has_temporal_marker — chunk mentions time-relative terms (today, POD N, etc.)
+  [6]       temporal_density    — temporal marker count / chunk word count
+  [7]       has_critical_event  — chunk mentions ICU transfer, intubation, arrest, etc.
+  [8]       has_abnormal_lab    — chunk contains abnormal lab flag ([H], [L], critical, etc.)
+
+  Group B — temporal proximity features (require _dischtime on chunk dict):
+  [9]       days_to_discharge   — days before discharge, normalized to [0, 1] over 30-day window
+  [10]      is_within_24h       — event occurred within 24h of discharge
+  [11]      is_within_1week     — event occurred within 7 days of discharge
+  [12]      has_no_timestamp    — 1 for note-section chunks (no embedded timestamp)
+
+  [13:32]   sec_*              — one-hot section category (19 categories)
+  [32:38]   qt_*               — one-hot question type  (6 categories)
+  [38:152]  int_*_*            — section × question_type interactions (114 dims)
+
+  Group C — new signal × question-type interactions (8 dims):
+  [138]     int_abnormal_lab_x_labs
+  [139]     int_abnormal_lab_x_diagnosis
+  [140]     int_critical_event_x_diagnosis
+  [141]     int_critical_event_x_procedure
+  [142]     int_within_24h_x_medications
+  [143]     int_within_24h_x_labs
+  [144]     int_temporal_marker_x_labs
+  [145]     int_temporal_marker_x_diagnosis
+
+  Group D — precision section header + content features (6 dims):
+  [146]     content_word_overlap     — lexical_overlap over non-stopword question tokens only
+  [147]     numeric_density          — fraction of tokens that are numeric (digits/units)
+  [148]     has_discharge_meds_hdr   — chunk header is "Discharge Medications"
+  [149]     has_admission_meds_hdr   — chunk header is "Medications on Admission"
+  [150]     has_discharge_labs_hdr   — chunk header is "Discharge Labs" / "LABS ON DISCHARGE"
+  [151]     has_admission_labs_hdr   — chunk header is "Labs on Admission" / "LABS ON ADMISSION"
+
+Total: 5 + 4 + 4 + 19 + 6 + 114 + 8 + 6 = 166 features
+
+Temporal metadata is passed via chunk["_dischtime"] (an ISO datetime string,
+e.g. "2180-06-27 14:30:00"). Set by build_dataset() and selector.select().
+Chunks without this field get neutral temporal feature values.
 
 The FeatureExtractor must be `.fit()` on the training corpus before
 calling `.extract_batch()` on any split.
@@ -20,6 +55,7 @@ from __future__ import annotations
 
 import pickle
 import re
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +63,125 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import normalize
 
 from Logreg.chunker import SECTION_CATEGORIES
+
+# ── Text-signal regexes (Group A) ─────────────────────────────────────────────
+
+# Temporal markers: relative time expressions common in clinical notes
+_TEMPORAL_MARKER_RE = re.compile(
+    r"\b("
+    r"today|tonight|overnight|this\s+(morning|afternoon|evening|night)"
+    r"|earlier\s+today|just\s+now|a\s+few\s+hours"
+    r"|post[\-\s]?op\s+day\s*\d*|pod\s*#?\s*\d+"
+    r"|hospital\s+day\s*\d*|hd\s*#?\s*\d+"
+    r"|day\s+[1-9]\d?(?:\s|$)"           # "day 1", "day 14" but not "day-to-day"
+    r")",
+    re.IGNORECASE,
+)
+
+# Critical clinical events: transfers, respiratory interventions, hemodynamic crises
+_CRITICAL_EVENT_RE = re.compile(
+    r"\b("
+    r"icu|intensive\s+care\s+unit|micu|sicu|ccicu|neuro\s*icu"
+    r"|intubat|extubat|re[\-\s]?intubat"
+    r"|mechanical\s+ventilat|vent(?:ilator)?"
+    r"|vasopressor|pressor|norepinephrine|dopamine|epinephrine\s+drip"
+    r"|cardiac\s+arrest|code\s+blue|cpr|rapid\s+response"
+    r"|emergent(?:ly)?|emergenc"
+    r"|transfer(?:red)?\s+to\s+(?:the\s+)?(?:icu|micu|sicu)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Abnormal lab flags: serialized event format ([H], [L], [abnormal]) and free text
+_ABNORMAL_LAB_RE = re.compile(
+    r"("
+    r"\[(?:H|L|abnormal|critical|high|low)\]"   # serialized flag: [H], [L], [abnormal]
+    r"|\bcritical\s+(?:value|result|lab)\b"
+    r"|\b(?:elevated|abnormal)\s+\w+\s*(?:level|value|result)?\b"
+    r"|\bmarkedly\s+(?:elevated|reduced|low|high)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# ISO timestamp embedded by event serializers: "2180-06-26 22:45:00" or "2180-06-26"
+_TIMESTAMP_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)\b")
+
+# ── Group D helpers ───────────────────────────────────────────────────────────
+
+# Stopwords to exclude from content_word_overlap
+_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "what", "which", "who",
+    "whom", "how", "when", "where", "why", "this", "that", "these",
+    "those", "i", "we", "you", "he", "she", "they", "it", "its",
+    "their", "our", "your", "his", "her", "at", "by", "for", "in",
+    "on", "of", "to", "up", "or", "and", "not", "with", "from",
+    "as", "about", "any", "all", "also", "are", "than", "if",
+    "patient", "patients", "s", "did", "the", "during", "after",
+    "before", "per", "mg", "ml", "the", "discharge", "admission",
+})
+
+# Numeric token: contains at least one digit
+_NUMERIC_RE = re.compile(r"\b[\d][\w./]*\b")
+
+# Section header patterns for MIMIC-IV discharge summary (checked against chunk["section_header"])
+_DISCHARGE_MEDS_RE  = re.compile(r"discharge\s+med",     re.I)
+_ADMISSION_MEDS_RE  = re.compile(r"med.*\badmission\b|\badmission\b.*med", re.I)
+_DISCHARGE_LABS_RE  = re.compile(r"(discharge|pertinent)\s+(lab|result)", re.I)
+_ADMISSION_LABS_RE  = re.compile(r"lab.*\badmission\b|\badmission\b.*lab|labs\s+on\s+admission", re.I)
+
+
+def _content_word_overlap(question: str, chunk_text: str) -> float:
+    """Fraction of non-stopword question tokens found in chunk text."""
+    q_tokens = set(re.findall(r"[a-z0-9]+", question.lower())) - _STOPWORDS
+    if not q_tokens:
+        return 0.0
+    c_tokens = set(re.findall(r"[a-z0-9]+", chunk_text.lower()))
+    return len(q_tokens & c_tokens) / len(q_tokens)
+
+
+def _numeric_density(text: str) -> float:
+    """Fraction of whitespace-tokens that are numeric."""
+    tokens = text.split()
+    if not tokens:
+        return 0.0
+    return sum(1 for t in tokens if _NUMERIC_RE.match(t)) / len(tokens)
+
+
+def _count_temporal_markers(text: str) -> int:
+    return len(_TEMPORAL_MARKER_RE.findall(text))
+
+
+def _extract_temporal_meta(
+    chunk_text: str,
+    dischtime: str | None,
+) -> tuple[float, float, float, float]:
+    """Compute Group B temporal proximity features for one chunk.
+
+    Returns (days_to_discharge_norm, is_within_24h, is_within_1week, has_no_timestamp).
+      days_to_discharge_norm: days before discharge / 30 (clamped [0, 1]);
+                              0.5 when no useful timestamp is available.
+      has_no_timestamp: 1.0 when no ISO date found in chunk text (note-section chunks).
+    """
+    m = _TIMESTAMP_RE.search(chunk_text)
+    if m is None or not dischtime:
+        return 0.5, 0.0, 0.0, 1.0
+
+    try:
+        ts_str = m.group(1)
+        fmt = "%Y-%m-%d %H:%M:%S" if len(ts_str) > 10 else "%Y-%m-%d"
+        chunk_dt = datetime.strptime(ts_str, fmt)
+        disch_dt = datetime.strptime(dischtime[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+        days_before = max(0.0, (disch_dt - chunk_dt).total_seconds() / 86400.0)
+        return (
+            min(days_before / 30.0, 1.0),   # normalized, 30-day window
+            float(days_before <= 1.0),
+            float(days_before <= 7.0),
+            0.0,
+        )
+    except (ValueError, OverflowError):
+        return 0.5, 0.0, 0.0, 1.0
 
 # ── Question type taxonomy ────────────────────────────────────────────────────
 
@@ -177,6 +332,32 @@ class FeatureExtractor:
         position   = np.array([c.get("position", 0.5) for c in chunks])
         log_length = np.log1p([len(c["text"].split()) for c in chunks])
 
+        # ── Group A: text-signal features ────────────────────────────────────
+        has_temporal_marker = np.array([
+            float(_count_temporal_markers(c["text"]) > 0) for c in chunks
+        ])
+        temporal_density = np.array([
+            _count_temporal_markers(c["text"]) / max(len(c["text"].split()), 1)
+            for c in chunks
+        ])
+        has_critical_event = np.array([
+            float(bool(_CRITICAL_EVENT_RE.search(c["text"]))) for c in chunks
+        ])
+        has_abnormal_lab = np.array([
+            float(bool(_ABNORMAL_LAB_RE.search(c["text"]))) for c in chunks
+        ])
+
+        # ── Group B: temporal proximity features ─────────────────────────────
+        # Reads _dischtime from chunk dict (set by build_dataset / selector.select)
+        temporal_rows = np.array([
+            _extract_temporal_meta(c["text"], c.get("_dischtime"))
+            for c in chunks
+        ])  # (N, 4): days_norm, within_24h, within_1week, has_no_timestamp
+        days_to_discharge = temporal_rows[:, 0]
+        is_within_24h     = temporal_rows[:, 1]
+        is_within_1week   = temporal_rows[:, 2]
+        has_no_timestamp  = temporal_rows[:, 3]
+
         # ── Section one-hot ───────────────────────────────────────────────────
         n_sec = len(SECTION_CATEGORIES)
         sec_onehot = np.zeros((N, n_sec))
@@ -188,14 +369,43 @@ class FeatureExtractor:
         # ── Question-type one-hot ─────────────────────────────────────────────
         n_qt = len(QUESTION_TYPES)
         qt_onehot = np.zeros((N, n_qt))
+        qt_indices = []
         for i, q in enumerate(questions):
             qt  = classify_question(q)
             idx = QUESTION_TYPES.index(qt)
             qt_onehot[i, idx] = 1.0
+            qt_indices.append(idx)
 
         # ── Section × question-type interactions ──────────────────────────────
-        # Shape: (N, n_sec, n_qt) → flatten to (N, n_sec * n_qt)
         interactions = (sec_onehot[:, :, None] * qt_onehot[:, None, :]).reshape(N, -1)
+
+        # ── Group C: new signal × question-type interactions ──────────────────
+        # Indices into QUESTION_TYPES: medications=0, diagnosis=1, labs=2, procedure=4
+        _qt = {qt: QUESTION_TYPES.index(qt) for qt in QUESTION_TYPES}
+        new_interactions = np.column_stack([
+            has_abnormal_lab    * qt_onehot[:, _qt["labs"]],
+            has_abnormal_lab    * qt_onehot[:, _qt["diagnosis"]],
+            has_critical_event  * qt_onehot[:, _qt["diagnosis"]],
+            has_critical_event  * qt_onehot[:, _qt["procedure"]],
+            is_within_24h       * qt_onehot[:, _qt["medications"]],
+            is_within_24h       * qt_onehot[:, _qt["labs"]],
+            has_temporal_marker * qt_onehot[:, _qt["labs"]],
+            has_temporal_marker * qt_onehot[:, _qt["diagnosis"]],
+        ])
+
+        # ── Group D: precision section header + content features ──────────────
+        content_word_overlap = np.array([
+            _content_word_overlap(q, c["text"])
+            for q, c in zip(questions, chunks)
+        ])
+        numeric_density = np.array([
+            _numeric_density(c["text"]) for c in chunks
+        ])
+        hdr = [c.get("section_header", "") for c in chunks]
+        has_discharge_meds_hdr = np.array([float(bool(_DISCHARGE_MEDS_RE.search(h))) for h in hdr])
+        has_admission_meds_hdr = np.array([float(bool(_ADMISSION_MEDS_RE.search(h))) for h in hdr])
+        has_discharge_labs_hdr = np.array([float(bool(_DISCHARGE_LABS_RE.search(h))) for h in hdr])
+        has_admission_labs_hdr = np.array([float(bool(_ADMISSION_LABS_RE.search(h))) for h in hdr])
 
         # ── Assemble ──────────────────────────────────────────────────────────
         X = np.column_stack([
@@ -204,18 +414,53 @@ class FeatureExtractor:
             lexical,
             position,
             log_length,
+            has_temporal_marker,
+            temporal_density,
+            has_critical_event,
+            has_abnormal_lab,
+            days_to_discharge,
+            is_within_24h,
+            is_within_1week,
+            has_no_timestamp,
             sec_onehot,
             qt_onehot,
             interactions,
+            new_interactions,
+            content_word_overlap,
+            numeric_density,
+            has_discharge_meds_hdr,
+            has_admission_meds_hdr,
+            has_discharge_labs_hdr,
+            has_admission_labs_hdr,
         ])
         return X.astype(np.float32)
 
     @property
     def feature_names(self) -> list[str]:
         names  = ["embed_sim", "tfidf_sim", "lexical_overlap", "position", "log_length"]
+        names += ["has_temporal_marker", "temporal_density", "has_critical_event", "has_abnormal_lab"]
+        names += ["days_to_discharge", "is_within_24h", "is_within_1week", "has_no_timestamp"]
         names += [f"sec_{s}"  for s in SECTION_CATEGORIES]
         names += [f"qt_{t}"   for t in QUESTION_TYPES]
         names += [f"int_{s}_{t}" for s in SECTION_CATEGORIES for t in QUESTION_TYPES]
+        names += [
+            "int_abnormal_lab_x_labs",
+            "int_abnormal_lab_x_diagnosis",
+            "int_critical_event_x_diagnosis",
+            "int_critical_event_x_procedure",
+            "int_within_24h_x_medications",
+            "int_within_24h_x_labs",
+            "int_temporal_marker_x_labs",
+            "int_temporal_marker_x_diagnosis",
+        ]
+        names += [
+            "content_word_overlap",
+            "numeric_density",
+            "has_discharge_meds_hdr",
+            "has_admission_meds_hdr",
+            "has_discharge_labs_hdr",
+            "has_admission_labs_hdr",
+        ]
         return names
 
     # ── Serialization ─────────────────────────────────────────────────────────

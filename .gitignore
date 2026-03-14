@@ -1,6 +1,13 @@
-# Processed output data (large, regenerable)
-data/processed/
-data/generated/
+# Processed output data
+# Key data files (patient_timelines.json, qa_pairs.json) are tracked via Git LFS
+data/processed/*
+!data/processed/patient_timelines.json
+data/generated/cache/
+data/generated/*
+!data/generated/qa_pairs.json
+
+# Evaluation results cache (regenerable)
+data/results/cache/
 
 # Python
 __pycache__/
@@ -29,3 +36,9 @@ env/
 # GCP credentials (should never be committed)
 *.json
 !data/physionet.org/**/*.json
+!data/processed/patient_timelines.json
+!data/generated/qa_pairs.json
+!data/results/*.json
+
+# CLAUDE.md
+CLAUDE.md
