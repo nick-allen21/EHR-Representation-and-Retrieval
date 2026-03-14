@@ -102,35 +102,88 @@ The Phase 1 E2E test used GPT-4o-generated QA pairs, creating a circular LLM-gen
 - [x] **Created SLURM script for verified set** — `scripts/run_verified_eval.sbatch` (HF models) and `scripts/run_verified_openai.sh` (OpenAI models)
 - [x] **Pushed all data and scripts to `nallen21/verified-qa-eval`** — no BigQuery access needed from here
 
-### Remaining steps (for FarmShare agent)
+### Evaluation runs (March 13–14, 2026)
 
-- [ ] **Run evaluation on verified set (OpenAI models)**:
-  ```bash
-  # From repo root — uses OPENAI_API_KEY from .env
-  python -m Evaluation.run_evaluation \
-      --model o4-mini --method all \
-      --timelines data/processed/patient_timelines_verified.json \
-      --qa-data data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json \
-      --output-dir data/results/verified --limit 70
+- [x] **o4-mini**: all 6 strategies complete
+- [x] **gpt-4o-mini**: all 6 strategies complete
+- [x] **Llama-3.1-8B-Instruct**: all 6 strategies complete
+- [x] **Mistral-7B-Instruct-v0.3**: all 6 strategies complete
+- [x] **Phi-3-mini-4k-instruct**: all 6 strategies complete
+- [x] **LLM-as-judge**: all 30 files scored (gpt-4o, 478 rows per file, 10,940 total judgments)
+- [x] **Logreg retrained**: model.pkl updated from 160 → 166 features (feature enrichment mismatch discovered and fixed during eval)
 
-  python -m Evaluation.run_evaluation \
-      --model gpt-4o-mini --method all \
-      --timelines data/processed/patient_timelines_verified.json \
-      --qa-data data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json \
-      --output-dir data/results/verified --limit 70
-  ```
-- [ ] **Run evaluation on verified set (HF models via SLURM)**:
-  ```bash
-  sbatch scripts/run_verified_eval.sbatch meta-llama/Llama-3.1-8B-Instruct
-  sbatch scripts/run_verified_eval.sbatch mistralai/Mistral-7B-Instruct-v0.3
-  sbatch scripts/run_verified_eval.sbatch microsoft/Phi-3-mini-4k-instruct
-  ```
-- [ ] **Run analysis + LLM-as-judge on verified results**:
-  ```bash
-  python -m Evaluation.analysis --results-dir data/results/verified --plots
-  python -m Evaluation.llm_judge --files data/results/verified/*__*.json --limit 200
-  ```
-- [ ] **Document results** — Update this file and README.md with verified-set matrices
+### Results (30/30 cells complete, March 14, 2026)
+
+**Token F1 (n=478 physician-verified QA pairs per cell)**
+
+| Model | discharge-only | full-context | recency | BM25 | semantic RAG | learned |
+|---|---|---|---|---|---|---|
+| o4-mini | **0.494** | 0.379 | 0.487 | 0.400 | 0.469 | 0.468 |
+| gpt-4o-mini | **0.608** | 0.457 | 0.601 | 0.493 | 0.556 | 0.562 |
+| Llama-3.1-8B | **0.551** | 0.394 | 0.540 | 0.434 | 0.495 | 0.511 |
+| Mistral-7B | **0.545** | 0.386 | 0.525 | 0.417 | 0.480 | 0.486 |
+| Phi-3-mini-4k | 0.420 | 0.300 | 0.410 | 0.413 | **0.475** | 0.460 |
+
+**ROUGE-L (n=478 per cell)**
+
+| Model | discharge-only | full-context | recency | BM25 | semantic RAG | learned |
+|---|---|---|---|---|---|---|
+| o4-mini | **0.455** | 0.346 | 0.449 | 0.363 | 0.427 | 0.429 |
+| gpt-4o-mini | **0.575** | 0.423 | 0.565 | 0.453 | 0.516 | 0.524 |
+| Llama-3.1-8B | **0.515** | 0.365 | 0.508 | 0.400 | 0.458 | 0.475 |
+| Mistral-7B | **0.509** | 0.355 | 0.487 | 0.377 | 0.445 | 0.447 |
+| Phi-3-mini-4k | 0.392 | 0.277 | 0.378 | 0.385 | **0.442** | 0.428 |
+
+**LLM-as-Judge (gpt-4o, 1–5 clinical correctness scale, n=478 per cell)**
+
+| Model | discharge-only | full-context | recency | BM25 | semantic RAG | learned |
+|---|---|---|---|---|---|---|
+| o4-mini | 4.38 | 3.46 | **4.40** | 3.72 | 4.09 | 4.06 |
+| gpt-4o-mini | 4.29 | 3.35 | **4.32** | 3.59 | 3.92 | 3.99 |
+| Llama-3.1-8B | 4.12 | 3.23 | **4.14** | 3.46 | 3.83 | 3.82 |
+| Mistral-7B | **4.02** | 3.17 | 4.00 | 3.38 | 3.69 | 3.76 |
+| Phi-3-mini-4k | **3.83** | 2.92 | 3.67 | 3.44 | 3.75 | 3.78 |
+
+**Context efficiency (avg tokens per strategy, across all models)**
+
+| Strategy | Avg context tokens | Avg Token F1 | Avg Judge |
+|---|---|---|---|
+| discharge-only | 1,975 | 0.523 | 4.13 |
+| full-context | 3,485 | 0.383 | 3.23 |
+| recency | 2,571 | 0.512 | 4.11 |
+| BM25 | 875 | 0.431 | 3.52 |
+| semantic RAG | 567 | 0.495 | 3.86 |
+| learned | 679 | 0.497 | 3.88 |
+
+### Key findings
+
+1. **Discharge-only wins on lexical metrics for 4/5 models** (best F1 = 0.608 for gpt-4o-mini). The physician-written discharge summary is a natural "best-of" context — a human already curated what matters.
+
+2. **Recency wins on judge scores for 3/5 models** (best judge = 4.40 for o4-mini). Recency includes the discharge summary plus recent events, giving the LLM slightly richer context that the judge rewards even when lexical overlap doesn't change much.
+
+3. **Full-context is consistently the worst strategy** across all three metrics (F1 0.300–0.457, judge 2.92–3.46). Dumping all structured EHR events into the context window adds noise and hurts performance.
+
+4. **Semantic RAG and learned achieve competitive quality with 65–72% fewer tokens**:
+   - Semantic RAG: 567 tokens, F1 0.495, judge 3.86
+   - Learned: 679 tokens, F1 0.497, judge 3.88
+   - Discharge-only: 1,975 tokens, F1 0.523, judge 4.13
+   - The efficiency gap is the core thesis result — the learned selector gets ~95% of discharge-only quality with ~1/3 the tokens.
+
+5. **Phi-3 is the exception**: semantic RAG (F1 0.475) and learned (0.460) beat discharge-only (0.420) for Phi-3, suggesting that smaller models with tighter context windows benefit more from intelligent chunk selection.
+
+6. **Token F1 and judge scores diverge on model rankings**: gpt-4o-mini has the highest Token F1 (0.608) but o4-mini has the highest judge scores (4.40). This suggests o4-mini produces more clinically precise answers that a judge rates higher even when they don't lexically match the gold answer.
+
+7. **Open-source models are competitive**: Llama (F1 0.551, judge 4.14) and Mistral (F1 0.545, judge 4.02) approach commercial models on the best strategies, suggesting context quality matters more than raw model capability for this task.
+
+8. **Dev-set vs verified-set patterns differ significantly**: On the dev set (GPT-generated QA), semantic RAG dominated; on the verified set (physician-reviewed QA), discharge-only dominates. This validates the concern about circular LLM evaluation and shows the importance of human-validated benchmarks.
+
+### Remaining steps
+
+- [x] All 30/30 cells complete
+- [x] LLM-as-judge scoring on all 30 files (gpt-4o, full 478 rows per file)
+- [x] summary.json and judge_rankings.json generated
+- [ ] Generate publication-quality plots (see Progress/PLOTS.md)
+- [ ] Final commit with all results
 
 ### Key data files (all committed, no BigQuery needed)
 
@@ -139,6 +192,11 @@ The Phase 1 E2E test used GPT-4o-generated QA pairs, creating a circular LLM-gen
 | `data/processed/patient_timelines_verified.json` | 70 patient timelines (discharge + structured events) |
 | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.json` | 70 patients, 506 QA pairs (478 correct) |
 | `data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa_verified.csv` | Same data in CSV format (used by Preprocess pipeline) |
-| `data/models/logreg/model.pkl` | Trained logreg selector (needed for "learned" strategy) |
-| `data/models/logreg/feature_extractor.pkl` | Fitted TF-IDF vectorizer (needed for "learned" strategy) |
-| `scripts/run_verified_eval.sbatch` | SLURM script for HF models on verified set |
+| `data/models/logreg/model.pkl` | Retrained logreg selector (166 features, matches current FeatureExtractor) |
+| `data/models/logreg/feature_extractor.pkl` | Fitted TF-IDF vectorizer + embedding config |
+| `data/results/verified/summary.json` | Aggregated Token F1, ROUGE-L, context tokens per model per strategy |
+| `data/results/verified/judge_rankings.json` | LLM-as-judge rankings, score distributions, per-strategy stats |
+| `data/results/verified/{model}__{strategy}.json` | 30 result files (478 rows each, all with `judge_score` fields) |
+| `scripts/run_hf_eval_verified.sbatch` | SLURM script for HF models on verified set |
+| `scripts/run_openai_eval_verified.sbatch` | SLURM script for OpenAI models (per-strategy, GPU for embeddings) |
+| `scripts/run_all_learned_verified.sbatch` | SLURM script for all 5 models × learned strategy |

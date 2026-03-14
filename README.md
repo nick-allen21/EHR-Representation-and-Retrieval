@@ -92,7 +92,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | — MLP ranker on frozen embeddings | | |
 | — Two-stage retrieval (fast retriever → re-ranker) | | |
 | **Full E2E test (200 patients, 5 models × 6 strategies)** | Nick | **Done (3/13/26)** — see `Progress/E2E_TEST.md` |
-| **Verified QA evaluation (70 physician-reviewed patients)** | Nick | **In progress (3/13/26)** — data ready (`patient_timelines_verified.json`), evaluation runs pending on FarmShare; see `Progress/E2E_TEST.md` Phase 2 |
+| **Verified QA evaluation (70 physician-reviewed patients)** | Nick | **Done (3/14/26)** — 30/30 cells complete + LLM-as-judge (gpt-4o, 478 rows/cell); discharge-only best on lexical metrics (F1=0.608), recency best on judge (4.40); learned achieves 95% quality with 1/3 tokens; see `Progress/E2E_TEST.md` Phase 2 |
 | **Strengthen evaluation and analysis** | Nick | In progress |
 | — Budget-efficiency curves (accuracy vs K) | Nick | Infrastructure built, need K/N sweeps |
 | — LLM-as-judge prompt design and execution | Nick | Done — rankings in `judge_rankings.json` |
@@ -124,6 +124,32 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | Phi-3-mini-4k-instruct (HF, 4k ctx) | 0.102 | 0.152 | 0.199 | 0.203 | **0.249** | 0.242 |
 
 **LLM-as-judge (gpt-4o-mini, 1–5 scale):** All 30 cells scored. Rankings in `data/results/judge_rankings.json`. Top by mean score: o4-mini full_context (3.28), o4-mini semantic_rag (3.56), o4-mini learned (3.46). Phi-3-mini-4k scores lowest (1.4–2.9) due to 4k context truncation.
+
+### Physician-Verified QA Set Results (Phase 2)
+
+Evaluated on 70 physician-reviewed patients (478 correct QA pairs, zero overlap with dev set). Full details in `Progress/E2E_TEST.md` Phase 2.
+
+**Token F1 (verified set, n=478 per cell):**
+
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | learned |
+|---|---|---|---|---|---|---|
+| o4-mini | **0.494** | 0.379 | 0.487 | 0.400 | 0.469 | 0.468 |
+| gpt-4o-mini | **0.608** | 0.457 | 0.601 | 0.493 | 0.556 | 0.562 |
+| Llama-3.1-8B | **0.551** | 0.394 | 0.540 | 0.434 | 0.495 | 0.511 |
+| Mistral-7B | **0.545** | 0.386 | 0.525 | 0.417 | 0.480 | 0.486 |
+| Phi-3-mini-4k | 0.420 | 0.300 | 0.410 | 0.413 | **0.475** | 0.460 |
+
+**LLM-as-Judge (gpt-4o, 1–5 scale, n=478 per cell):**
+
+|  | discharge-only | full-context | recency | BM25 | semantic RAG | learned |
+|---|---|---|---|---|---|---|
+| o4-mini | 4.38 | 3.46 | **4.40** | 3.72 | 4.09 | 4.06 |
+| gpt-4o-mini | 4.29 | 3.35 | **4.32** | 3.59 | 3.92 | 3.99 |
+| Llama-3.1-8B | 4.12 | 3.23 | **4.14** | 3.46 | 3.83 | 3.82 |
+| Mistral-7B | **4.02** | 3.17 | 4.00 | 3.38 | 3.69 | 3.76 |
+| Phi-3-mini-4k | **3.83** | 2.92 | 3.67 | 3.44 | 3.75 | 3.78 |
+
+**Key insight — dev set vs verified set**: On the dev set (GPT-generated QA), semantic RAG dominated across all models. On the verified set (physician-reviewed QA), discharge-only and recency dominate. This validates the concern about circular LLM evaluation and shows the importance of human-validated benchmarks. The learned selector maintains its efficiency advantage on both sets (~1/3 the tokens for ~95% of the quality).
 
 ### Extensions (optional, if time permits)
 

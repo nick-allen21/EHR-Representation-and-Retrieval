@@ -95,18 +95,34 @@ Priority order: make the first four first. Together they cover the thesis, retri
 - **Rows:** Models (o4-mini, gpt-4o-mini, Llama-3.1-8B, Mistral-7B, Phi-3-mini)
 - **Columns:** Retrieval strategies (6)
 - **Cell color:** Token F1 (or judge score)
-- **Status:** Only o4-mini row populated so far
+- **Status:** **DATA READY** — both dev set (200 patients) and verified set (70 patients) have full 30/30 matrices
 
-**Data source:** `data/results/{model}__{method}.json` files once HF runs complete
+**Data source:** `data/results/verified/{model}__{method}.json` (verified set), `data/results/{model}__{method}.json` (dev set)
 
 ---
+
+## Data Availability Status (updated March 14, 2026)
+
+| # | Figure | Data Ready? | Code in `analysis.py`? | Notes |
+|---|---|---|---|---|
+| 1 | Efficiency scatter | **Yes** — `data/results/verified/summary.json` has `context_tokens_mean` + `token_f1_mean` | No — needs new function | |
+| 2 | Grouped bar (multi-metric) | **Yes** — summary.json has F1 + ROUGE-L; judge scores in result files | Partial — bar chart exists but only F1 | Need to merge judge scores |
+| 3 | Recall@K curve | **Yes** — values known; existing plot at `data/models/logreg/plots/recall_at_k.png` | Done (existing) | Already generated |
+| 4 | Feature importance | **Yes** — `model.pkl` + `feature_extractor.pkl` (retrained, 166 features) | Done (existing) | At `data/models/logreg/plots/feature_importance.png`; retrained model may differ |
+| 5 | Judge score distribution | **Yes** — `data/results/verified/judge_rankings.json` → `score_dist` | No — needs new function | |
+| 6 | Per-difficulty breakdown | **Partial** — verified QA set has no difficulty field (all "unknown") | No | Difficulty breakdown only available on dev set |
+| 7 | Budget-efficiency curve | **No** — needs K-sweep experiment runs | No | Blocked on data |
+| 8 | Heatmap | **Yes** — 30/30 cells for both dev and verified sets | Yes — `save_plots()` generates heatmap | Can run now for both sets |
 
 ## Data Locations Quick Reference
 
 | Data needed | File |
 |---|---|
-| Token F1, ROUGE-L, context tokens, judge mean per strategy | `data/results/summary.json` |
-| Judge win counts, score distribution, per-difficulty | `data/results/judge_rankings.json` |
+| **Dev set** Token F1, ROUGE-L, context tokens per strategy | `data/results/summary.json` |
+| **Verified set** Token F1, ROUGE-L, context tokens per strategy | `data/results/verified/summary.json` |
+| **Dev set** Judge rankings, score distribution, per-difficulty | `data/results/judge_rankings.json` |
+| **Verified set** Judge rankings, score distribution | `data/results/verified/judge_rankings.json` |
 | Recall@K values | `data/models/logreg/metrics.json` |
-| Feature weights | `data/models/logreg/model.pkl` + `feature_extractor.pkl` |
-| Per-row results (custom aggregations) | `data/results/o4-mini__{method}.json` |
+| Feature weights (retrained, 166 features) | `data/models/logreg/model.pkl` + `feature_extractor.pkl` |
+| Per-row results — dev set | `data/results/{model}__{method}.json` |
+| Per-row results — verified set | `data/results/verified/{model}__{method}.json` |
