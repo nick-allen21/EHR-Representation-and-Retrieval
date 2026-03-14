@@ -1,0 +1,14 @@
+\paragraph{Data sources.}
+All patient data is derived from MIMIC-IV (core tables + MIMIC-IV-Note), accessed via PhysioNet-hosted BigQuery and a preprocessing pipeline that materializes per-admission longitudinal timelines. The pipeline joins demographics/admissions with structured events (labs, vitals, medications, procedures, diagnoses) and discharge summaries into a single JSON record per admission.
+
+\paragraph{QA supervision.}
+We generate QA pairs using a larger model (gpt-4o) over serialized patient timelines, producing a question, answer, difficulty, and required source types; this provides scalable supervision for training. The codebase also supports training on an independent synthetic QA source (EHR-DS-QA) and evaluating on clinician-reviewed datasets when available. While teacher-generated QA is imperfect, it enables a distillation-style setting where improved retrieval helps a resource-constrained smaller model better approximate a stronger model.
+
+\paragraph{Chunking.}
+We chunk discharge summaries with section-aware splitting when headers are present (e.g., \texttt{HOSPITAL COURSE}, \texttt{DISCHARGE MEDICATIONS}), falling back to fixed-size overlapping token windows for coverage. Structured events are serialized into short snippets and included as additional candidate chunks.
+
+\paragraph{Weak labels for training.}
+Because supervision provides (question, answer) but not per-chunk relevance annotations, we assign binary labels using token-level overlap (token F1) between the answer and chunk text at a threshold, yielding a weak but scalable relevance proxy.
+
+\paragraph{Feature vector.}
+The selector uses a \textbf{166-dimensional} feature vector $\phi(q,c)$. Core features include semantic and lexical similarity (embedding cosine, TF--IDF cosine, token overlap) plus structural signals (chunk position, length). We add note structure via section one-hots (19), question-type one-hots (6), and section$\times$question-type interactions (102), with L1 regularization zeroing many interactions. Finally, we include temporal and clinical-salience features (temporal markers, ICU/intubation/arrest flags, abnormal lab indicators, proximity-to-discharge signals, and interactions), which improves retrieval performance (e.g., Recall@3/Recall@5) over the baseline.

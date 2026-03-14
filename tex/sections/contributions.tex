@@ -1,5 +1,5 @@
 \paragraph{Nicholas Allen (nallen21).}
-Implemented and validated the data access and preprocessing infrastructure, including: acquiring credentialed dataset access, organizing BigQuery configuration and permissions, building the MIMIC extraction pipeline (notes + structured tables), and producing longitudinal patient timeline records suitable for downstream QA generation and model training.
+Implemented the data access and preprocessing infrastructure, including BigQuery extraction of MIMIC-IV timelines, QA generation with caching, and the downstream LLM evaluation pipeline with multiple retrieval baselines and multi-model routing .
 
 \paragraph{Niki Yoon (nikiyoon).}
-Designed the learned context selection architecture and modeling plan, including: chunking and weak-labeling strategy for (question, chunk) supervision, feature brainstorming/specification, initial logistic regression model design, and drafting this milestone report.
+Designed the learned retrieval layer and modeling approach, specified and implemented feature engineering (including temporal/salience enrichment), built the L1 logistic regression selector, and led report drafting and method articulation .

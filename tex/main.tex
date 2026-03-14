@@ -1,47 +1,76 @@
-\documentclass[11pt]{article}
+\documentclass[10pt]{article}
 
 \usepackage[margin=1in]{geometry}
-\usepackage{times}
+\usepackage{newtxtext,newtxmath}
 \usepackage{microtype}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{enumitem}
+\usepackage{graphicx}
 \usepackage[hidelinks]{hyperref}
 \usepackage[numbers]{natbib}
-\usepackage{graphicx}
+\usepackage{titlesec}
 
-\setlength{\parskip}{0.35em}
+% tighter spacing
+\setlength{\parskip}{0.15em}
 \setlength{\parindent}{0em}
-\setlist[itemize]{topsep=2pt, itemsep=1pt, leftmargin=*}
-\setlist[enumerate]{topsep=2pt, itemsep=1pt, leftmargin=*}
 
-\title{\vspace{-1.0em}\textbf{Learning Minimal, Temporally Coherent EHR Representations for Clinical Decision Support}}
+\titlespacing*{\section}{0pt}{0.6em}{0.3em}
+\titlespacing*{\subsection}{0pt}{0.5em}{0.2em}
+\titlespacing*{\paragraph}{0pt}{0.35em}{0.25em}
+\titleformat{\paragraph}[runin]{\bfseries}{}{0pt}{}[\enspace]\setlist[itemize]{topsep=1pt,itemsep=0pt,parsep=0pt,partopsep=0pt,leftmargin=*}
+\setlist[enumerate]{topsep=1pt,itemsep=0pt,parsep=0pt,partopsep=0pt,leftmargin=*}
+
+\setlength{\abovedisplayskip}{3pt}
+\setlength{\belowdisplayskip}{3pt}
+\setlength{\abovedisplayshortskip}{2pt}
+\setlength{\belowdisplayshortskip}{2pt}
+
+\setlength{\textfloatsep}{8pt}
+\setlength{\floatsep}{6pt}
+\setlength{\intextsep}{6pt}
+
+\setlength{\bibsep}{0pt}
+
+\title{\textbf{Teacher-Supervised EHR Context Selection to Improve Small LLM Clinical QA}}
 \author{
 Niki Yoon (SUNet: \texttt{nikiyoon}) \and
 Nicholas Allen (SUNet: \texttt{nallen21})
 }
-\date{\vspace{-0.8em}}
+\date{}
 
 \begin{document}
 \maketitle
-\vspace{-0.75em}
+\vspace{-0.6em}
 
-\section{Motivation}
-\input{sections/motivation}
+\begin{abstract}
+\vspace{-0.4em}
+\input{sections/abstract}
+\vspace{-0.4em}
+\end{abstract}
 
-\section{Method}
-\input{sections/method}
+\section{Introduction}
+\input{sections/introduction}
 
-\section{Preliminary Experiments}
-\input{sections/preliminary}
+\section{Related Work}
+\input{sections/related_work}
 
-\section{Next Steps}
-\input{sections/next_steps}
+\section{Dataset and Features}
+\input{sections/dataset_features}
 
-\section{Contributions}
+\section{Methods}
+\input{sections/methods}
+
+\section{Experiments, Results, and Discussion}
+\input{sections/experiments_placeholder}
+
+\section{Conclusion and Future Work}
+\input{sections/conclusion_future}
+
+\section*{Contributions}
 \input{sections/contributions}
 
 \bibliographystyle{plainnat}
-\bibliography{sections/references}
+\bibliography{references}
 
 \end{document}

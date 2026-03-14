@@ -1,0 +1,11 @@
+\paragraph{Problem setting.}
+Large language models are increasingly used to assist clinicians by retrieving and summarizing information from Electronic Health Records (EHRs). EHRs are long, heterogeneous, and temporally structured: free-text notes (e.g., discharge summaries) coexist with time-stamped structured events (labs, vitals, medications, diagnoses, procedures). Under limited context windows, systems must decide which evidence to present. Common heuristics (recency-only, semantic similarity retrieval, note-type filters) often surface redundant or irrelevant content and underuse clinical structure.
+
+\paragraph{Goal.}
+We aim to learn a \emph{minimal, temporally coherent} representation of a patient record that maximizes question-answering utility under a strict context budget. Given a clinical question $q$ and a patient record $X$ represented as candidate chunks (note chunks and event snippets), our selector outputs a ranked list and selects a top-$K$ subset to pass to a frozen downstream model.
+
+\paragraph{Approach and scope.}
+We treat the downstream LLM as a fixed consumer and learn an upstream scoring function $s_\theta(q,c)$ that predicts whether a chunk $c$ is useful evidence for answering $q$. Our baseline selector is an L1-regularized logistic regression ranker using lexical/semantic similarity, note structure, and temporal/salience features. We implement an end-to-end pipeline---BigQuery extraction of MIMIC-IV timelines, QA supervision generation with caching, learned chunk selection, and downstream evaluation across multiple retrieval strategies and LLMs.
+
+\paragraph{Why this matters.}
+Our objective is not to outperform frontier models, but to \emph{empower smaller LLMs}: we compare a small LLM baseline against the same model augmented with our learned selection layer, holding the model and prompting fixed so gains can be attributed to better context selection.
