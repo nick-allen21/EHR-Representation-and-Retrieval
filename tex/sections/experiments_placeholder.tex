@@ -18,6 +18,7 @@ For each question, we run the \emph{same frozen small LLM} with identical prompt
   \item \textbf{Semantic RAG:} retrieve top-$K$ chunks by embedding similarity.
   \item \textbf{Lexical retrieval:} BM25/TF--IDF top-$K$ chunks.
   \item \textbf{Recency/heuristics:} recent events or late-note chunks.
+  \item \textbf{Discharge summary:} just the discharge summary of a note (if applicable)
   \item \textbf{Learned selector (ours):} L1 logistic regression chunk scorer selecting top-$K$.
 \end{itemize}
 All strategies operate over a common candidate chunk pool to ensure fair comparison.
@@ -47,45 +48,32 @@ This evaluation directly measures whether our learned selector improves the smal
 
 
 \subsection*{Discussion:}
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.9\linewidth]{data/results/plots/verified/01_efficiency_scatter.png}
+\end{figure}
 
-    \paragraph{The model is learning document structure, not just similarity.} A key finding is that the learned selector behaves differently than semantic RAG. Semantic RAG ranks chunks primarily by embedding similarity to the question (effectively relying on a single signal analogous to \texttt{embed\_sim}). In contrast, our L1 logistic regression assigns most of its effective weight mass to \emph{structural signals}: section identity and section--question interactions account for the majority of active weight (approximately 79\% combined in our current run). This indicates that the model has learned that \emph{where} information appears in a discharge summary often predicts relevance more strongly than surface lexical or semantic overlap.
-    \paragraph{Structural cues in messy data. }We also observe that the model begins to exploit patterns that are difficult for pure similarity retrieval to capture reliably. For example, dosage-like tokens (e.g., mg'', qhs'', bid'') are strongly associated with medication questions, even when the note does not explicitly frame the content as a medication statement. In real discharge summaries, important facts are often presented in terse, semi-structured forms (lists, abbreviated lines) rather than in well-formed sentences (e.g., not always The medication we administered was ...''). A section-aware selector can exploit these formatting and locality cues, which helps when note structure is inconsistent or headers are incomplete
+    \paragraph{The model is learning document structure, not just similarity.} A key finding is that the learned selector behaves differently than semantic RAG. Semantic RAG ranks chunks primarily by embedding similarity to the question (effectively relying on a single signal analogous to \texttt{embed\_sim}). In contrast, our L1 logistic regression assigns most of its effective weight mass to \emph{structural signals}: section identity and section--question interactions account for the majority of active weight (approximately 79\% combined in our current run). This indicates that the model has learned that \emph{where} information appears in a discharge summary often predicts relevance more strongly than surface lexical or semantic overlap. We also observe that the model begins to exploit patterns that are difficult for pure similarity retrieval to capture reliably. For example, dosage-like tokens (e.g., mg'', qhs'', bid'') are strongly associated with medication questions, even when the note does not explicitly frame the content as a medication statement. In real discharge summaries, important facts are often presented in terse, semi-structured forms (lists, abbreviated lines) rather than in well-formed sentences, which is where a section and keyword aware selector can help.
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{data/results/plots/dev/04_feature_importance.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{data/results/plots/verified/08_heatmap_judge-score.png}
+  \end{minipage}
+\end{figure}
+
+    \paragraph{Efficiency. } While not always the "most"accurate strategy, our model was the most efficient, often placing 2nd or third in metrics (F1, Judge), showing the balance of efficiency and accuracy, aligned with our goal of empowering a small model. Judging demonstrates our model to be on par with semantic rag (and better in all scenarios than full-context), with a mean score of 4.06 with o4-mini (against physician verified answers).
     \paragraph{Similarity features. }While similarity features remain important, they are not dominant: raw similarity signals (TF--IDF similarity and embedding similarity) contribute a smaller fraction of active weight (roughly 17.6\% in our current analysis), with \texttt{embed\_sim} alone representing the core of the semantic RAG baseline. Our learned selector outperforms semantic RAG in part because it learns to down-weight sections that commonly contain semantically similar but non-answer text (e.g., vitals sections that mention a drug name without providing the discharge medication list).
-    \paragraph{Limitation of data. }At scale, clinical QA over EHRs has an unavoidable circularity problem: we want to learn “which chunks lead to the best answer,” but the ideal training signal would require clinicians to annotate (or rank) which exact pieces of the record were necessary and sufficient for each answer. Such evidence attribution is expensive, and most available datasets provide only question–answer pairs, not grounded evidence spans or clinician-ranked relevance. Our current supervision is therefore \emph{weak}: we label chunks by token overlap with the gold answer and do not observe human judgments of chunk usefulness. This introduces label noise and can bias the selector toward surface form matches. This points towards a common problem, but especially so in the healthcare space: high-quality, labeled data (not only the QA pairs, but also the evidence labeled as useful or not useful) that can lead to better interpretability.  
+    \paragraph{Limitation of data. }At scale, clinical QA over EHRs has an unavoidable circularity problem: we want to learn “which chunks lead to the best answer,” but the ideal training signal would require clinicians to annotate (or rank) which exact pieces of the record were necessary and sufficient for each answer. Such evidence attribution is expensive, and most available datasets provide only question–answer pairs, not grounded evidence spans or clinician-ranked relevance. Our current supervision is therefore \emph{weak}: we label chunks by token overlap with the gold answer and do not observe human judgments of chunk usefulness. This introduces label noise and can bias the selector toward surface form matches. This points towards a common problem, but especially so in the healthcare space: high-quality, labeled data (not only the QA pairs, but also the evidence labeled as useful or not useful) for better interpretability.
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.9\linewidth]{data/results/plots/verified/02_metrics_by_strategy.png}
+\end{figure}
     \paragraph{}Although we use a stronger model to generate QA supervision, this does not eliminate bias or hallucination risk. A teacher may omit items in lists, prefer certain phrasing, or generate questions that are easier for retrieval than real clinician questions. For this reason, our strongest claims rely on clinician-reviewed benchmarks (e.g., EHRNoteQA) and we treat teacher-generated QA primarily as a scalable training substrate rather than ground truth.
 
 
-% ---------------- Figure/Table placeholders ----------------
-% \begin{figure}[t]
-%   \centering
-%   \includegraphics[width=0.9\linewidth]{figures/recall_at_k.png}
-%   \caption{Per-question Recall@K vs K for baselines and learned selector (weak-label retrieval diagnostic).}
-% \end{figure}
-%
-% \begin{table}[t]
-%   \centering
-%   \begin{tabular}{lcc}
-%     \toprule
-%     Method & F1 & ROUGE-L \\
-%     \midrule
-%     Small LLM + Semantic RAG &  &  \\
-%     Small LLM + Full context &  &  \\
-%     Small LLM + Learned Selector (ours) &  &  \\
-%     \bottomrule
-%   \end{tabular}
-%   \caption{Downstream QA performance on EHRNoteQA v1.0.1 \citep{PhysioNet-ehr-notes-qa-llms-1.0.1}.}
-% \end{table}
-%
-% \begin{table}[t]
-%   \centering
-%   \begin{tabular}{lcc}
-%     \toprule
-%     Method & Mean judge score (1--5) & Win rate vs baseline \\
-%     \midrule
-%     Semantic RAG &  &  \\
-%     Full context &  &  \\
-%     Learned Selector (ours) &  &  \\
-%     \bottomrule
-%   \end{tabular}
-%   \caption{LLM-as-judge evaluation referenced to gold answers (1--5 rubric).}
-% \end{table}
