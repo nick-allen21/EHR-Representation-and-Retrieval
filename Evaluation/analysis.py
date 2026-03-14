@@ -59,7 +59,7 @@ METHOD_DISPLAY = {
 }
 
 
-# ── Loading ───────────────────────────────────────────────────────────────────
+#Loading
 
 def load_all_results(
     results_dir: str | Path = _RESULTS_DIR,
@@ -95,7 +95,7 @@ def _mean(rows: list[dict], key: str) -> float:
     return float(np.mean(vals)) if vals else 0.0
 
 
-# ── Multi-model matrix ────────────────────────────────────────────────────────
+#─ Multi-model matrix 
 
 def model_method_matrix(
     data: dict[tuple[str, str], list[dict]],
@@ -148,7 +148,7 @@ def format_matrix_table(
     return "\n".join(rows_out)
 
 
-# ── Legacy single-model summary table ────────────────────────────────────────
+#Legacy single-model summary table 
 
 def summary_table(results: dict[str, list[dict]] | dict[tuple, list[dict]]) -> str:
     """Build a formatted comparison table across strategies.
@@ -185,7 +185,7 @@ def summary_table(results: dict[str, list[dict]] | dict[tuple, list[dict]]) -> s
     return "\n".join(lines)
 
 
-# ── Per-difficulty breakdown ──────────────────────────────────────────────────
+#Per-difficulty breakdown 
 
 def difficulty_breakdown(results: dict) -> str:
     """Break down scores by question difficulty (easy / medium / hard)."""
@@ -278,7 +278,7 @@ def save_plots(
     log.info("Saved token_f1_heatmap.png")
 
 
-# ── Structured export ─────────────────────────────────────────────────────────
+#Structured expor
 
 def export_summary_json(
     data: dict[tuple[str, str], list[dict]],

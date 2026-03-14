@@ -1,14 +1,13 @@
 """Merge EHR-DS-QA data with MIMIC-IV structured + note data into
 longitudinal patient records.
 
-Each output record represents one hospital admission and contains:
+Each output record represents one hospital admission and Has the foloiwng tibgs:
 - patient demographics
 - admission metadata
 - the full discharge summary text
 - temporally ordered clinical events (labs, vitals, medications, procedures, diagnoses)
 
-QA pairs are generated separately by the Generation pipeline (see Generation/).
-The EHR-DS-QA CSV is used here only for its subject_id / hadm_id mappings.
+QA pairs are generated separately by the generation pipeline (see Generation/).
 """
 
 from pathlib import Path
@@ -25,8 +24,7 @@ from Preprocess.extract_structured import (
     get_patients,
     get_prescriptions,
     get_procedures,
-    get_vitals,
-)
+    get_vitals,)
 
 
 def load_qa_dataset(config: dict | None = None) -> pd.DataFrame:

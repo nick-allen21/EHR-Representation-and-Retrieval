@@ -72,7 +72,7 @@ class HFRunner:
         self.batch_size = batch_size
         self._stats = {"cache_hits": 0, "api_calls": 0, "errors": 0}
 
-        # Same attribute name as LLMRunner so callers can log runner.model
+        # Same attribute name as llmrunner so callers can log runner.model
         self.model = model_id
 
         hf_token = os.environ.get("HF_TOKEN")
@@ -88,7 +88,7 @@ class HFRunner:
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_id,
             token=hf_token,
-            padding_side="left",  # required for decoder-only batch generation
+            padding_side="left",  # required for decode only batch generation
         )
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -109,7 +109,7 @@ class HFRunner:
             model_id, self._max_model_len,
         )
 
-    # ── Core batch inference (synchronous) ────────────────────────────────────
+    # ── Core batch inference (synchronous) 
 
     def _batch_generate(
         self,
@@ -258,7 +258,7 @@ class HFRunner:
                 self.batch_size,
             )
 
-        # --- GPU inference in sub-batches ---
+        # GPU inference in sub-batches 
         for batch_start in range(0, len(uncached), self.batch_size):
             batch = uncached[batch_start : batch_start + self.batch_size]
             msgs_batch = [msgs for _, _, msgs, _ in batch]
@@ -295,7 +295,7 @@ class HFRunner:
 
         return results  # type: ignore[return-value]
 
-    # ── Stats ─────────────────────────────────────────────────────────────────
+    #  Stats 
 
     @property
     def stats(self) -> dict:

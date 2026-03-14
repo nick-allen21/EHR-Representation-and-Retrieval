@@ -1,5 +1,8 @@
 from pathlib import Path
 
+### CITATION!!!: USED CHATGPT TO HELP WITH BIGQUERY FUNCTIONS (WE DID NOT NOW HOW TO DO THIS PREVIOUSLY)
+
+# bigquery stuff
 import yaml
 from google.cloud import bigquery
 import pandas as pd
@@ -21,7 +24,7 @@ def get_client(config: dict | None = None) -> bigquery.Client:
 
 def run_query(sql: str, client: bigquery.Client | None = None,
               config: dict | None = None) -> pd.DataFrame:
-    """Execute a BigQuery SQL string and return results as a DataFrame."""
+    """Execute a Bigquery SQL string and return results as a DataFrame."""
     if config is None:
         config = load_config()
     if client is None:

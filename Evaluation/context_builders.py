@@ -23,7 +23,7 @@ from rank_bm25 import BM25Okapi
 from Logreg.chunker import chunk_note
 from Logreg.data_loader import serialize_events
 
-# ── Token helpers ─────────────────────────────────────────────────────────────
+#Token helpers
 
 _encoder: tiktoken.Encoding | None = None
 
@@ -47,7 +47,7 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
     return enc.decode(toks[:max_tokens])
 
 
-# ── Prompt template (stub — will be refined during prompt-design phase) ───────
+# Prompt template (stub — will be refined during prompt-design phase)
 
 SYSTEM_PROMPT = (
     "You are a clinical QA assistant. Answer the question based ONLY on the "
@@ -69,7 +69,7 @@ def _overhead_tokens(question: str) -> int:
     return count_tokens(format_user_prompt("", question))
 
 
-# ── Helpers for full_context / recency ────────────────────────────────────────
+# Helpers for full_context / recency
 
 def _serialize_demographics(demo: dict) -> str:
     if not demo:
@@ -91,7 +91,7 @@ def _serialize_admission(adm: dict) -> str:
     return "\n".join(lines)
 
 
-# ── Strategy: discharge_only ──────────────────────────────────────────────────
+#Strategy: discharge_only
 
 def build_discharge_only(
     record: dict,
@@ -109,7 +109,7 @@ def build_discharge_only(
     }
 
 
-# ── Strategy: full_context ────────────────────────────────────────────────────
+# Strategy: full_context
 
 def build_full_context(
     record: dict,
@@ -141,7 +141,7 @@ def build_full_context(
     }
 
 
-# ── Strategy: recency ─────────────────────────────────────────────────────────
+# Strategy: recency
 
 def build_recency(
     record: dict,
@@ -167,7 +167,7 @@ def build_recency(
     }
 
 
-# ── Strategy: bm25 ───────────────────────────────────────────────────────────
+# Strategy: bm25 
 
 def build_bm25(
     record: dict,
@@ -200,7 +200,7 @@ def build_bm25(
     }
 
 
-# ── Strategy: semantic_rag ────────────────────────────────────────────────────
+# Strategy: semantic_rag 
 
 _embed_model = None
 
@@ -246,7 +246,7 @@ def build_semantic_rag(
     }
 
 
-# ── Strategy: learned ─────────────────────────────────────────────────────────
+#  Strategy: learned 
 
 def build_learned(
     record: dict,
@@ -278,8 +278,7 @@ def build_learned(
     }
 
 
-# ── Public registry ───────────────────────────────────────────────────────────
-
+# Public registry 
 STRATEGIES: dict[str, callable] = {
     "discharge_only": build_discharge_only,
     "full_context":   build_full_context,
