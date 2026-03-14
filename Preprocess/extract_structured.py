@@ -1,9 +1,11 @@
-"""Fetch structured clinical data from MIMIC-IV on BigQuery.
+"""Fetch structured clinical data from mimic on bigq
 
-Each public function takes a list of subject/hadm IDs, queries BigQuery in
-batches, and returns a tidy DataFrame with a timestamp column for temporal
+Each public function takes a list of subject/hadm IDs, queries bigquery in
+batches, and returns a tidy df with a timestamp column for temporal
 ordering.
 """
+
+### CITATION!!!: USED CHATGPT TO HELP WITH BIGQUERY AND SQL FUNCTIONS
 
 import pandas as pd
 from google.cloud import bigquery

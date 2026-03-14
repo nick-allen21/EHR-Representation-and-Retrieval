@@ -121,7 +121,7 @@ def build_patient_timelines(
     client = client or get_client(config)
     batch_size = config["pipeline"]["batch_size"]
 
-    # 1. Load local QA data
+    # 1 Load local QA data
     qa_df = load_qa_dataset(config)
 
     if limit is not None:
@@ -133,7 +133,7 @@ def build_patient_timelines(
     print(f"Loaded {len(qa_df)} QA rows — "
           f"{len(subject_ids)} patients, {len(hadm_ids)} admissions")
 
-    # 2. Fetch all MIMIC-IV data from BigQuery
+    # 2 Fetch all MIMIC-IV data from BigQuery
     print("Fetching discharge notes …")
     notes_df = get_discharge_notes(
         subject_ids, hadm_ids, client=client, config=config, batch_size=batch_size
@@ -164,7 +164,7 @@ def build_patient_timelines(
         subject_ids, hadm_ids, client=client, config=config
     )
 
-    # 3. Index auxiliary DataFrames by admission
+    # 3 Index auxiliary dataframes by admission
     patients_map = {
         row["subject_id"]: row.to_dict()
         for _, row in patients_df.iterrows()
@@ -180,7 +180,7 @@ def build_patient_timelines(
         for _, row in notes_df.iterrows():
             notes_map[row["hadm_id"]] = row["text"]
 
-    # 4. Build one record per admission
+    # 4Build one record   per admission
     records: list[dict] = []
 
     for _, qa_row in qa_df.iterrows():
