@@ -1,17 +1,9 @@
 """Aggregate evaluation results and produce comparison tables and plots.
 
-Reads JSON result files from data/results/ (one per model×strategy), computes
+Reads JSON result files from data/results/ (one per model x strategy), computes
 summary statistics, and optionally generates bar charts and efficiency curves.
 
-Result filenames follow the convention ``{model_slug}__{method}.json``, e.g.
-``o4-mini__bm25_k5.json``.  Old-style files without a ``__`` separator are
-treated as belonging to the model "unknown".
-
-Usage
------
-python -m Evaluation.analysis                          # print summary table
-python -m Evaluation.analysis --plots                  # also save plots
-python -m Evaluation.analysis --results-dir data/results --plots
+Filenames follow the convention {model_slug}__{method}.json.
 """
 
 from __future__ import annotations
@@ -59,15 +51,15 @@ METHOD_DISPLAY = {
 }
 
 
-#Loading
+# Loading
 
 def load_all_results(
     results_dir: str | Path = _RESULTS_DIR,
 ) -> dict[tuple[str, str], list[dict]]:
-    """Load result files into ``{(model_slug, method): [result_dicts]}``.
+    """Load result files into {(model_slug, method): [result_dicts]}.
 
-    Parses model and method from ``{model}__{method}.json`` filenames.
-    Falls back to ``("unknown", stem)`` for legacy files.
+    Parses model and method from {model}__{method}.json filenames.
+    Falls back to ("unknown", stem) for legacy files.
     """
     results_dir = Path(results_dir)
     data: dict[tuple[str, str], list[dict]] = {}
@@ -95,13 +87,13 @@ def _mean(rows: list[dict], key: str) -> float:
     return float(np.mean(vals)) if vals else 0.0
 
 
-#─ Multi-model matrix 
+# Multi-model matrix
 
 def model_method_matrix(
     data: dict[tuple[str, str], list[dict]],
     metric: str = "token_f1",
 ) -> dict[str, dict[str, float | None]]:
-    """Build ``{model_slug: {method: mean_metric}}`` for every populated cell."""
+    """Build {model_slug: {method: mean_metric}} for every populated cell."""
     matrix: dict[str, dict[str, float | None]] = {}
     for (model, method), rows in data.items():
         matrix.setdefault(model, {})[method] = _mean(rows, metric)
@@ -148,12 +140,12 @@ def format_matrix_table(
     return "\n".join(rows_out)
 
 
-#Legacy single-model summary table 
+# Single-model summary table
 
 def summary_table(results: dict[str, list[dict]] | dict[tuple, list[dict]]) -> str:
     """Build a formatted comparison table across strategies.
 
-    Accepts either legacy ``{method: [rows]}`` or new ``{(model, method): [rows]}``
+    Accepts either legacy {method: [rows]} or new {(model, method): [rows]}
     format; if new format, flattens to per-method (combining all models).
     """
     flat: dict[str, list[dict]] = {}
@@ -185,7 +177,7 @@ def summary_table(results: dict[str, list[dict]] | dict[tuple, list[dict]]) -> s
     return "\n".join(lines)
 
 
-#Per-difficulty breakdown 
+# Per-difficulty breakdown
 
 def difficulty_breakdown(results: dict) -> str:
     """Break down scores by question difficulty (easy / medium / hard)."""
@@ -212,7 +204,7 @@ def difficulty_breakdown(results: dict) -> str:
     return "Per-difficulty Token-F1:\n" + "\n".join(lines)
 
 
-# ── Plots ─────────────────────────────────────────────────────────────────────
+# Plots
 
 def save_plots(
     data: dict[tuple[str, str], list[dict]],
@@ -278,7 +270,7 @@ def save_plots(
     log.info("Saved token_f1_heatmap.png")
 
 
-#Structured expor
+# Structured export
 
 def export_summary_json(
     data: dict[tuple[str, str], list[dict]],
@@ -298,7 +290,7 @@ def export_summary_json(
     log.info("Summary JSON saved to %s", output_path)
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
+# CLI
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

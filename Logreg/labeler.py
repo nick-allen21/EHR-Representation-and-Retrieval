@@ -16,9 +16,9 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-# ── Clinical entity vocabulary ────────────────────────────────────────────────
-# Terms that, when shared between a question and a chunk, signal relevance.
-# Kept intentionally specific to avoid false positives in narrative text.
+### CITATION: Used Claude 4.6 Opus to help generate the clinical entity vocabulary
+### and regex patterns below.
+# Clinical entity vocabulary for entity-boosted labeling
 _CLINICAL_ENTITIES: frozenset[str] = frozenset({
     # Labs
     "sodium", "potassium", "creatinine", "glucose", "hemoglobin", "hematocrit",

@@ -29,7 +29,7 @@ import json
 import math
 from pathlib import Path
 
-# ── Known QA sources (pass either to load_qa_pairs / load_and_merge) ─────────
+# Known QA source paths
 QA_GENERATED    = Path("data/generated/qa_pairs.json")
 QA_EHR_DS_QA    = Path("data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.json")
 QA_EHR_DS_QA_CSV = Path("data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv")
@@ -135,7 +135,7 @@ def _is_discharge_grounded(qa: dict) -> bool:
     return "discharge_summary" in source_types
 
 
-# ── Event serialization ──────────────────────────────────────────────────────
+# Event serialization
 
 def _fmt(val) -> str:
     """Format a value for text serialization, handling None / NaN."""
@@ -252,8 +252,6 @@ def serialize_events(events: list[dict]) -> str:
 
     return "\n\n".join(sections)
 
-
-# ── Merge ────────────────────────────────────────────────────────────────────
 
 def merge(
     timelines: list[dict],

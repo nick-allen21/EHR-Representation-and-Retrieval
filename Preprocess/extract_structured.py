@@ -1,11 +1,10 @@
-"""Fetch structured clinical data from mimic on bigq
+### CITATION: Used Claude 4.6 Opus to help generate the SQL queries in this file.
+"""Fetch structured clinical data from MIMIC-IV on BigQuery.
 
-Each public function takes a list of subject/hadm IDs, queries bigquery in
-batches, and returns a tidy df with a timestamp column for temporal
+Each public function takes a list of subject/hadm IDs, queries BigQuery in
+batches, and returns a tidy DataFrame with a timestamp column for temporal
 ordering.
 """
-
-### CITATION!!!: USED CHATGPT TO HELP WITH BIGQUERY AND SQL FUNCTIONS
 
 import pandas as pd
 from google.cloud import bigquery
@@ -13,9 +12,7 @@ from google.cloud import bigquery
 from Preprocess.bigquery_client import load_config, get_client, build_id_filter
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _batched_query(
     sql_template: str,
@@ -24,9 +21,9 @@ def _batched_query(
     client: bigquery.Client,
     batch_size: int = 500,
 ) -> pd.DataFrame:
-    """Run *sql_template* in batches over *id_values*.
+    """Run sql_template in batches over id_values.
 
-    ``sql_template`` must contain a ``{id_filter}`` placeholder.
+    sql_template must contain a {id_filter} placeholder.
     """
     unique_ids = list(set(id_values))
     frames: list[pd.DataFrame] = []
@@ -42,16 +39,14 @@ def _batched_query(
     return pd.concat(frames, ignore_index=True)
 
 
-# ---------------------------------------------------------------------------
 # Public extractors
-# ---------------------------------------------------------------------------
 
 def get_patients(
     subject_ids: list[int],
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """Demographics from ``mimiciv_hosp.patients``."""
+    """Demographics from mimiciv_hosp.patients."""
     config = config or load_config()
     client = client or get_client(config)
     table = config["tables"]["patients"]
@@ -69,7 +64,7 @@ def get_admissions(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """Admission-level details from ``mimiciv_hosp.admissions``."""
+    """Admission-level details from mimiciv_hosp.admissions."""
     config = config or load_config()
     client = client or get_client(config)
     table = config["tables"]["admissions"]
@@ -93,7 +88,7 @@ def get_diagnoses(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """ICD diagnoses with long titles from ``mimiciv_hosp.diagnoses_icd``."""
+    """ICD diagnoses with long titles from mimiciv_hosp.diagnoses_icd."""
     config = config or load_config()
     client = client or get_client(config)
     dx = config["tables"]["diagnoses_icd"]
@@ -118,7 +113,7 @@ def get_procedures(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """ICD procedures with long titles from ``mimiciv_hosp.procedures_icd``."""
+    """ICD procedures with long titles from mimiciv_hosp.procedures_icd."""
     config = config or load_config()
     client = client or get_client(config)
     px = config["tables"]["procedures_icd"]
@@ -144,7 +139,7 @@ def get_labs(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """Lab results from ``mimiciv_hosp.labevents`` with item labels."""
+    """Lab results from mimiciv_hosp.labevents with item labels."""
     config = config or load_config()
     client = client or get_client(config)
     lab = config["tables"]["labevents"]
@@ -175,7 +170,7 @@ def get_prescriptions(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """Medication prescriptions from ``mimiciv_hosp.prescriptions``."""
+    """Medication prescriptions from mimiciv_hosp.prescriptions."""
     config = config or load_config()
     client = client or get_client(config)
     table = config["tables"]["prescriptions"]
@@ -201,7 +196,7 @@ def get_vitals(
     client: bigquery.Client | None = None,
     config: dict | None = None,
 ) -> pd.DataFrame:
-    """Vital signs from ``mimiciv_icu.chartevents``.
+    """Vital signs from mimiciv_icu.chartevents.
 
     Filters to common vital-sign item IDs:
       220045=HR, 220050=SysBP, 220051=DiasBP, 220052=MeanBP,

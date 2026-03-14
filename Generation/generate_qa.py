@@ -4,7 +4,7 @@ Reads patient timelines, serializes each into a structured text block,
 sends them to gpt-4o with a system prompt requesting temporal/cross-source
 QA pairs, and writes the results with per-patient caching for resumability.
 
-The pipeline is **append-only**: existing QA pairs (in the output file or
+The pipeline is append-only: existing QA pairs (in the output file or
 per-patient cache) are never overwritten. Running with a larger --limit
 will only generate QA pairs for new (subject_id, hadm_id) pairs.
 

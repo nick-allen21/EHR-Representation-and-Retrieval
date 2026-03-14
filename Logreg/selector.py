@@ -48,8 +48,6 @@ class ChunkSelector:
         extractor = FeatureExtractor.load(model_dir / "feature_extractor.pkl")
         return cls(model, extractor, strategy=strategy)
 
-    # ── Core scoring ──────────────────────────────────────────────────────────
-
     def score_chunks(
         self,
         question: str,
@@ -70,8 +68,6 @@ class ChunkSelector:
 
         X = self.extractor.extract_batch(questions, chunks, q_embeddings, c_embeddings)
         return self.model.predict_proba(X)[:, 1]
-
-    # ── Top-K selection ───────────────────────────────────────────────────────
 
     def select(
         self,
@@ -106,8 +102,6 @@ class ChunkSelector:
             chunk["score"] = float(scores[i])
             result.append(chunk)
         return result
-
-    # ── Evaluation ────────────────────────────────────────────────────────────
 
     def recall_at_k(
         self,

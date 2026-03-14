@@ -1,42 +1,12 @@
 """LLM-as-judge scoring and ranking for evaluation result files.
 
-Two modes:
+Normal run: adds judge_score (1-5) in-place to each result file and
+saves rankings to judge_rankings.json and summary.json.
 
-  **Normal run** (default): Adds ``judge_score`` (1–5) in-place to each result
-  file and saves rankings to ``judge_rankings.json`` and ``summary.json``.
+Dry-run (--dry-run): makes fresh API calls on a sample (bypasses the
+main cache), prints the ranking table to stdout, writes nothing to disk.
 
-  **Dry-run** (``--dry-run``): Makes fresh API calls on a sample (bypasses the
-  main cache), prints the ranking table to stdout, and writes nothing to disk.
-  Useful for spot-checks and sanity tests.
-
-Usage
------
-# Score all *__*.json files in data/results/ in-place
-python -m Evaluation.llm_judge
-
-# Score files in a specific directory
-python -m Evaluation.llm_judge --results-dir data/results/verified
-
-# Score specific files only
-python -m Evaluation.llm_judge \\
-    --files data/results/o4-mini__full_context.json \\
-            data/results/o4-mini__semantic_rag_k5.json \\
-            data/results/o4-mini__learned_k5.json
-
-# Pilot / re-score: random sample of 100 questions per file
-python -m Evaluation.llm_judge --limit 100
-
-# Dry-run: fresh API calls on 50 questions, print table only, write nothing
-python -m Evaluation.llm_judge --dry-run --limit 50
-
-# Dry-run filtered to hard questions
-python -m Evaluation.llm_judge --dry-run --limit 30 --difficulty hard
-
-# Rank only (no new API calls — reads existing judge_score fields)
-python -m Evaluation.llm_judge --rank-only
-
-# Re-score everything from scratch
-python -m Evaluation.llm_judge --rescore --limit 200
+See --help for full usage.
 """
 
 from __future__ import annotations
@@ -65,7 +35,9 @@ _DEFAULT_FILES = [
     "data/results/o4-mini__learned_k5.json",
 ]
 
-# ── Clinical correctness rubric ───────────────────────────────────────────────
+### CITATION: Used Claude 4.6 Opus to help draft the clinical correctness rubric
+### prompt below.
+# Clinical correctness rubric
 
 JUDGE_SYSTEM_PROMPT = """\
 You are an expert clinical reviewer evaluating an AI question-answering system \
@@ -103,7 +75,7 @@ that is still correct (score 4–5).
 - Return ONLY a single integer (1, 2, 3, 4, or 5). No explanation."""
 
 
-# ── Phase 1: Score ─────────────────────────────────────────────────────────────
+# Phase 1: Score
 
 
 def _format_judge_prompt(question: str, gold: str, predicted: str) -> str:
@@ -130,7 +102,7 @@ def _question_key(row: dict) -> tuple:
     return (int(row["subject_id"]), int(row["hadm_id"]), row["question"].strip())
 
 
-# ── Core judge call ───────────────────────────────────────────────────────────
+# Core judge call
 
 async def judge_single(
     runner: LLMRunner,
@@ -159,7 +131,7 @@ async def judge_single(
     return out
 
 
-# ── Phase 1: Score files ──────────────────────────────────────────────────────
+# Score files
 
 async def _score_file(
     runner: LLMRunner,
@@ -168,9 +140,9 @@ async def _score_file(
     seed: int = 42,
     rescore: bool = False,
 ) -> int:
-    """Add ``judge_score`` in-place to rows in *path*.
+    """Add judge_score in-place to rows in the given file.
 
-    Only rows without a score are judged unless *rescore=True*. Returns the
+    Only rows without a score are judged unless rescore=True. Returns the
     number of rows judged in this call.
     """
     rows = json.loads(path.read_text())
@@ -214,7 +186,7 @@ async def _score_file(
     return len(to_score)
 
 
-# ── Phase 2: Rank ─────────────────────────────────────────────────────────────
+# Phase 2: Rank
 
 def _rank_strategies(
     files: list[Path],
@@ -223,8 +195,7 @@ def _rank_strategies(
 ) -> dict | None:
     """Cross-reference judge scores across strategy files, print rankings, return data dict.
 
-    If *scored_rows* is provided (dry-run path), use those rows instead of
-    reading from files.
+    If scored_rows is provided (dry-run path), use those instead of reading from files.
     """
     strategy_index: dict[str, dict[tuple, dict]] = {}
 
@@ -294,7 +265,7 @@ def _rank_strategies(
     })
     ranked = sorted(strategies, key=lambda s: -wins[s])
 
-    # ── Print ──────────────────────────────────────────────────────────────────
+    # Print rankings
     print(f"\n{'='*72}")
     print(f"  LLM-as-Judge Rankings  (n={n} questions)")
     print(f"{'='*72}")
@@ -355,7 +326,7 @@ def _rank_strategies(
     }
 
 
-# ── Save helpers ──────────────────────────────────────────────────────────────
+# Save helpers
 
 def _save_judge_rankings(
     data: dict,
@@ -412,7 +383,7 @@ def _save_to_summary_json(
     log.info("Updated judge_score_mean in %s", summary_path)
 
 
-# ── CLI runner ────────────────────────────────────────────────────────────────
+# CLI runner
 
 async def _run(args: argparse.Namespace) -> None:
     t0 = time.time()
@@ -426,7 +397,7 @@ async def _run(args: argparse.Namespace) -> None:
             log.error("No result files matching *__*.json in %s", args.results_dir)
             return
 
-    # ── Dry-run: fresh API calls, print only, write nothing ───────────────────
+    # Dry-run: fresh API calls, print only, write nothing
     if args.dry_run:
         tmp_cache = tempfile.mkdtemp(prefix="judge_fresh_")
         runner = LLMRunner(
@@ -501,7 +472,7 @@ async def _run(args: argparse.Namespace) -> None:
         print(f"(temp cache at {tmp_cache} — not saved to project)\n")
         return
 
-    # ── Rank-only: read existing judge_score fields, no API calls ─────────────
+    # Rank-only: read existing judge_score fields, no API calls
     if args.rank_only:
         existing_files = [f for f in files if f.exists()]
         if not existing_files:
@@ -510,7 +481,7 @@ async def _run(args: argparse.Namespace) -> None:
         data = _rank_strategies(existing_files, difficulty_filter=args.difficulty)
         return
 
-    # ── Normal run: score in-place, then save rankings ─────────────────────────
+    # Normal run: score in-place, then save rankings
     runner = LLMRunner(
         model=args.judge_model,
         cache_dir=args.cache_dir,

@@ -1,3 +1,5 @@
+CITATION: This prompt was drafted with the help of Claude 4.6 Opus.
+
 You are an expert clinical data analyst reviewing a patient's complete hospital record. Your task is to generate exactly 5 question-answer pairs that test a reader's ability to synthesize information across multiple data sources and reason about temporal relationships.
 
 You will be given a structured patient record containing:

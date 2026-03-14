@@ -1,11 +1,6 @@
 """Score predicted answers against gold answers.
 
-Metrics
--------
-token_f1     Whitespace-tokenized precision / recall / F1.
-rouge_l      ROUGE-L (longest common subsequence) via the rouge-score package.
-llm_judge    LLM-as-judge correctness rating on a 1-5 scale (stub — deferred
-             until prompt-design phase).
+Implements token F1, ROUGE-L, and LLM-as-judge scoring.
 """
 
 from __future__ import annotations
@@ -14,7 +9,7 @@ import re
 from rouge_score import rouge_scorer
 
 
-# ── Token F1 ──────────────────────────────────────────────────────────────────
+# Token F1
 
 def _normalize(text: str) -> list[str]:
     """Lowercase, strip punctuation, split on whitespace."""
@@ -37,7 +32,7 @@ def token_f1(predicted: str, gold: str) -> dict:
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
-# ── ROUGE-L ───────────────────────────────────────────────────────────────────
+# ROUGE-L
 
 _scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
 
@@ -49,7 +44,8 @@ def rouge_l(predicted: str, gold: str) -> dict:
     return {"precision": rl.precision, "recall": rl.recall, "f1": rl.fmeasure}
 
 
-# ── LLM-as-Judge (stub) ──────────────────────────────────────────────────────
+### CITATION: Used Claude 4.6 Opus to help draft the LLM-as-judge rubric prompt below.
+# LLM-as-Judge
 
 _JUDGE_RUBRIC = """\
 You are evaluating a clinical QA system. Given the question, the reference
@@ -72,10 +68,10 @@ async def llm_judge(
     gold: str,
     runner=None,
 ) -> dict:
-    """Rate *predicted* vs *gold* using an LLM judge.
+    """Rate predicted vs gold using an LLM judge.
 
-    Requires a ``LLMRunner`` instance (from llm_runner.py).  Returns
-    ``{"score": int}`` on success, ``{"score": 0, "error": ...}`` on failure.
+    Requires an LLMRunner instance. Returns {"score": int} on success,
+    or {"score": 0, "error": ...} on failure.
     """
     if runner is None:
         raise ValueError("llm_judge requires a LLMRunner instance via runner=")
@@ -103,7 +99,7 @@ async def llm_judge(
     return {"score": score}
 
 
-# ── Batch scoring ─────────────────────────────────────────────────────────────
+# Batch scoring
 
 def score_pair(predicted: str, gold: str) -> dict:
     """Compute all deterministic metrics for one (predicted, gold) pair."""

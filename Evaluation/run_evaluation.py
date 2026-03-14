@@ -70,7 +70,7 @@ _DEFAULT_TIMELINES = Path("data/processed/patient_timelines.json")
 _RESULTS_DIR = Path("data/results")
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# Data loading
 
 def _build_eval_records(
     timelines_path: Path,
@@ -130,7 +130,7 @@ def _build_eval_records(
     return records
 
 
-# ── Running a single strategy ─────────────────────────────────────────────────
+# Running a single strategy
 
 async def _run_strategy(
     method: str,
@@ -190,7 +190,7 @@ async def _run_strategy(
     return results
 
 
-# ── Save results ──────────────────────────────────────────────────────────────
+# Save results
 
 def _save_results(results: list[dict], method: str, output_dir: Path, model: str = "unknown") -> Path:
     """Write results to a JSON file, stripping the full prompt to save space."""
@@ -210,7 +210,7 @@ def _save_results(results: list[dict], method: str, output_dir: Path, model: str
     return path
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 async def run(args: argparse.Namespace) -> None:
     records = _build_eval_records(

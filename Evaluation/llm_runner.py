@@ -54,8 +54,6 @@ class LLMRunner:
         self.semaphore = asyncio.Semaphore(concurrency)
         self._stats = {"cache_hits": 0, "api_calls": 0, "errors": 0}
 
-    # ── Single call ───────────────────────────────────────────────────────────
-
     async def generate(
         self,
         system_prompt: str,
@@ -65,13 +63,7 @@ class LLMRunner:
     ) -> dict:
         """Send a prompt and return the response (with caching).
 
-        Returns
-        -------
-        dict with keys:
-            answer            str
-            prompt_tokens     int
-            completion_tokens int
-            cached            bool
+        Returns a dict with answer, prompt_tokens, completion_tokens, cached.
         """
         messages = [
             {"role": "system", "content": system_prompt},
@@ -154,8 +146,6 @@ class LLMRunner:
             "error": "max_retries_exhausted",
         }
 
-    # ── Batch call ────────────────────────────────────────────────────────────
-
     async def generate_batch(
         self,
         items: list[dict],
@@ -165,8 +155,8 @@ class LLMRunner:
     ) -> list[dict]:
         """Run generate() concurrently for a list of items.
 
-        Each item must have a ``user_prompt`` key.  Returns results in the same
-        order as *items*, with the original item fields merged into each result.
+        Each item must have a 'user_prompt' key. Returns results in the same
+        order as items, with the original item fields merged into each result.
         """
         async def _one(item: dict) -> dict:
             result = await self.generate(
@@ -178,8 +168,6 @@ class LLMRunner:
             return {**item, **result}
 
         return await asyncio.gather(*[_one(it) for it in items])
-
-    # ── Stats ─────────────────────────────────────────────────────────────────
 
     @property
     def stats(self) -> dict:

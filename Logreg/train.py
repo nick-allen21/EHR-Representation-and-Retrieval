@@ -41,8 +41,6 @@ from Logreg.features import FeatureExtractor
 from Logreg.labeler import label_chunks
 
 
-# ── Dataset construction ──────────────────────────────────────────────────────
-
 def build_dataset(
     merged_records: list[dict],
     strategy: str = "section",
@@ -135,8 +133,6 @@ def patient_split(
     return train_idx, val_idx
 
 
-# ── Model training ────────────────────────────────────────────────────────────
-
 def train_model(
     X: np.ndarray,
     y: np.ndarray,
@@ -160,8 +156,6 @@ def train_model(
     model.fit(X, y)
     return model
 
-
-# ── Evaluation ────────────────────────────────────────────────────────────────
 
 def evaluate_model(
     model: LogisticRegression,
@@ -240,8 +234,6 @@ def per_question_recall_at_k(
     }
 
 
-# ── Plotting ─────────────────────────────────────────────────────────────────
-
 def _save_plots(
     model: LogisticRegression,
     X_val: np.ndarray,
@@ -250,14 +242,14 @@ def _save_plots(
     recall_metrics: dict[str, float],
     output_dir: Path,
 ) -> None:
-    """Generate and save diagnostic plots to *output_dir*/plots/."""
+    """Generate and save diagnostic plots to output_dir/plots/."""
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     y_prob = model.predict_proba(X_val)[:, 1]
     y_int  = y_val.astype(int)
 
-    # ── 1. Feature importance (top 20 non-zero) ─────────────────────────────
+    # 1. Feature importance (top 20 non-zero)
     coef = model.coef_[0]
     nonzero_mask = coef != 0
     nz_idx   = np.where(nonzero_mask)[0]
@@ -278,7 +270,7 @@ def _save_plots(
     fig.savefig(plots_dir / "feature_importance.png", dpi=150)
     plt.close(fig)
 
-    # ── 2. ROC curve ────────────────────────────────────────────────────────
+    # 2. ROC curve
     if len(np.unique(y_int)) > 1:
         fpr, tpr, _ = roc_curve(y_int, y_prob)
         auc_val = roc_auc_score(y_int, y_prob)
@@ -296,7 +288,7 @@ def _save_plots(
         fig.savefig(plots_dir / "roc_curve.png", dpi=150)
         plt.close(fig)
 
-    # ── 3. Precision-Recall curve ───────────────────────────────────────────
+    # 3. Precision-Recall curve
     if len(np.unique(y_int)) > 1:
         prec, rec, _ = precision_recall_curve(y_int, y_prob)
         ap = average_precision_score(y_int, y_prob)
@@ -313,7 +305,7 @@ def _save_plots(
         fig.savefig(plots_dir / "precision_recall_curve.png", dpi=150)
         plt.close(fig)
 
-    # ── 4. Recall@K curve ───────────────────────────────────────────────────
+    # 4. Recall@K curve
     k_values = sorted(int(k.split("@")[1]) for k in recall_metrics)
     recalls  = [recall_metrics[f"mean_recall@{k}"] for k in k_values]
 
@@ -332,7 +324,7 @@ def _save_plots(
     fig.savefig(plots_dir / "recall_at_k.png", dpi=150)
     plt.close(fig)
 
-    # ── 5. Score distribution ───────────────────────────────────────────────
+    # 5. Score distribution
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.hist(y_prob[y_int == 0], bins=40, alpha=0.6, label="Negative", color="#e74c3c", density=True)
     ax.hist(y_prob[y_int == 1], bins=40, alpha=0.6, label="Positive", color="#2ecc71", density=True)
@@ -346,8 +338,6 @@ def _save_plots(
 
     print(f"Plots saved to {plots_dir}/")
 
-
-# ── Full training pipeline ────────────────────────────────────────────────────
 
 def run_training(
     merged_records: list[dict],

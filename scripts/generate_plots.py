@@ -29,14 +29,14 @@ import seaborn as sns
 
 log = logging.getLogger(__name__)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# Paths
 
 ROOT = Path(__file__).resolve().parent.parent
 DEV_RESULTS = ROOT / "data" / "results"
 VERIFIED_RESULTS = ROOT / "data" / "results" / "verified"
 MODEL_DIR = ROOT / "data" / "models" / "logreg"
 
-# ── Display constants ─────────────────────────────────────────────────────────
+# Display constants
 
 MODEL_SLUGS = [
     "o4-mini",
@@ -72,7 +72,7 @@ METHOD_DISPLAY = {
     "learned_k5": "Learned (Ours)",
 }
 
-# ── Style ─────────────────────────────────────────────────────────────────────
+# Style
 
 STRATEGY_PALETTE = {
     "discharge_only": "#6C757D",
@@ -111,7 +111,7 @@ def _apply_style():
     })
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# Data loading
 
 def load_summary(results_dir: Path) -> dict:
     p = results_dir / "summary.json"
@@ -154,7 +154,7 @@ def _judge_means(per_q: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, st
     return means
 
 
-# ── Plot 1: Efficiency vs Accuracy Scatter ────────────────────────────────────
+# Plot 1: Efficiency vs Accuracy Scatter
 
 def plot_efficiency_scatter(summary: dict, per_q: dict, out: Path, dataset_label: str):
     judge_means = _judge_means(per_q)
@@ -199,7 +199,7 @@ def plot_efficiency_scatter(summary: dict, per_q: dict, out: Path, dataset_label
     log.info("Saved 01_efficiency_scatter.png")
 
 
-# ── Plot 2: Grouped Bar — All Metrics by Strategy ────────────────────────────
+# Plot 2: Grouped Bar - All Metrics by Strategy
 
 def plot_metrics_by_strategy(summary: dict, per_q: dict, out: Path, dataset_label: str):
     judge_means = _judge_means(per_q)
@@ -245,7 +245,7 @@ def plot_metrics_by_strategy(summary: dict, per_q: dict, out: Path, dataset_labe
     log.info("Saved 02_metrics_by_strategy.png")
 
 
-# ── Plot 3: Recall@K Curve ───────────────────────────────────────────────────
+# Plot 3: Recall@K Curve
 
 def plot_recall_at_k(out: Path):
     ks = [1, 3, 5, 10]
@@ -273,7 +273,7 @@ def plot_recall_at_k(out: Path):
     log.info("Saved 03_recall_at_k.png")
 
 
-# ── Plot 4: Feature Importance ────────────────────────────────────────────────
+# Plot 4: Feature Importance
 
 def _load_feature_data() -> tuple[list[str], np.ndarray]:
     SECTION_CATEGORIES = [
@@ -345,7 +345,7 @@ def plot_feature_importance(out: Path):
     log.info("Saved 04_feature_importance.png")
 
 
-# ── Plot 5: Judge Score Distribution — Stacked Bar ───────────────────────────
+# Plot 5: Judge Score Distribution - Stacked Bar
 
 def plot_judge_distribution(judge_data: dict, out: Path, dataset_label: str):
     ranked = judge_data.get("ranked", [])
@@ -401,7 +401,7 @@ def plot_judge_distribution(judge_data: dict, out: Path, dataset_label: str):
     log.info("Saved 05_judge_distribution.png")
 
 
-# ── Plot 6: Per-Difficulty Breakdown ──────────────────────────────────────────
+# Plot 6: Per-Difficulty Breakdown
 
 def plot_per_difficulty(judge_data: dict, out: Path, dataset_label: str):
     by_diff = judge_data.get("by_difficulty", {})
@@ -442,7 +442,7 @@ def plot_per_difficulty(judge_data: dict, out: Path, dataset_label: str):
     log.info("Saved 06_per_difficulty.png")
 
 
-# ── Plot 8: Model × Retrieval Heatmap ────────────────────────────────────────
+# Plot 8: Model x Retrieval Heatmap
 
 def plot_heatmap(summary: dict, per_q: dict, out: Path, dataset_label: str, metric: str = "token_f1"):
     if metric == "judge_score":
@@ -496,7 +496,7 @@ def plot_heatmap(summary: dict, per_q: dict, out: Path, dataset_label: str, metr
     log.info("Saved 08_heatmap_%s.png", suffix)
 
 
-# ── Plot 9: Feature Weight Category Breakdown ────────────────────────────────
+# Plot 9: Feature Weight Category Breakdown
 
 def plot_feature_group_breakdown(out: Path):
     names, weights = _load_feature_data()
@@ -565,7 +565,7 @@ def plot_feature_group_breakdown(out: Path):
     log.info("Saved 09_feature_group_breakdown.png")
 
 
-# ── Plot 10: Small Model Lift Chart ──────────────────────────────────────────
+# Plot 10: Small Model Lift Chart
 
 def plot_model_lift(summary: dict, per_q: dict, out: Path, dataset_label: str):
     judge_means = _judge_means(per_q)
@@ -615,7 +615,7 @@ def plot_model_lift(summary: dict, per_q: dict, out: Path, dataset_label: str):
     log.info("Saved 10_model_lift.png")
 
 
-# ── Plot 11: Phi-3 Context Cliff ─────────────────────────────────────────────
+# Plot 11: Phi-3 Context Cliff
 
 def plot_phi3_cliff(summary: dict, per_q: dict, out: Path, dataset_label: str):
     model = "microsoft--Phi-3-mini-4k-instruct"
@@ -661,7 +661,7 @@ def plot_phi3_cliff(summary: dict, per_q: dict, out: Path, dataset_label: str):
     log.info("Saved 11_phi3_cliff.png")
 
 
-# ── Plot 12: Pairwise Win Rate — Learned vs Baselines ────────────────────────
+# Plot 12: Pairwise Win Rate - Learned vs Baselines
 
 def plot_pairwise_winrate(per_q: dict, out: Path, dataset_label: str):
     baselines = ["discharge_only", "full_context", "recency_n25", "bm25_k5", "semantic_rag_k5"]
@@ -714,7 +714,7 @@ def plot_pairwise_winrate(per_q: dict, out: Path, dataset_label: str):
     log.info("Saved 12_pairwise_winrate.png")
 
 
-# ── Orchestration ─────────────────────────────────────────────────────────────
+# Orchestration
 
 def generate_all(results_dir: Path, out_dir: Path, dataset_label: str, is_dev: bool):
     out_dir.mkdir(parents=True, exist_ok=True)

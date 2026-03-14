@@ -1,6 +1,7 @@
 from pathlib import Path
 
-### CITATION!!!: USED CHATGPT TO HELP WITH BIGQUERY FUNCTIONS (WE DID NOT NOW HOW TO DO THIS PREVIOUSLY)
+### CITATION: Used ChatGPT to help with BigQuery setup and configuration.
+### We had no prior experience with the BigQuery Python client.
 
 # bigquery stuff
 import yaml
@@ -35,7 +36,7 @@ def run_query(sql: str, client: bigquery.Client | None = None,
 def build_id_filter(column: str, values: list, alias: str = "") -> str:
     """Build a SQL IN-clause filter for a list of integer IDs.
 
-    Returns a string like: ``alias.column IN (1, 2, 3)``
+    Returns a string like: alias.column IN (1, 2, 3)
     """
     prefix = f"{alias}." if alias else ""
     ids = ", ".join(str(int(v)) for v in values)

@@ -1,17 +1,10 @@
 """Build LLM prompts for each retrieval strategy.
 
-Each builder takes a patient record + question and returns a dict containing
-the user-facing prompt, token counts, and method metadata.  The system prompt
+Each builder takes a patient record + question and returns a dict with
+the user-facing prompt, token counts, and method metadata. The system prompt
 is shared across all strategies and exported as SYSTEM_PROMPT.
 
-Strategies
-----------
-discharge_only   Raw discharge summary text (floor baseline).
-full_context     Demographics + admission + all events + discharge summary.
-recency          Discharge summary + N most recent events.
-bm25             Top-K chunks ranked by BM25 score.
-semantic_rag     Top-K chunks ranked by embedding cosine similarity.
-learned          Top-K chunks from the trained logistic regression selector.
+Strategies: discharge_only, full_context, recency, bm25, semantic_rag, learned.
 """
 
 from __future__ import annotations
@@ -23,7 +16,7 @@ from rank_bm25 import BM25Okapi
 from Logreg.chunker import chunk_note
 from Logreg.data_loader import serialize_events
 
-#Token helpers
+# Token helpers
 
 _encoder: tiktoken.Encoding | None = None
 
@@ -49,6 +42,7 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
 
 # Prompt template (stub — will be refined during prompt-design phase)
 
+### CITATION: Used Claude 4.6 Opus to help draft the system prompt below.
 SYSTEM_PROMPT = (
     "You are a clinical QA assistant. Answer the question based ONLY on the "
     "provided patient context. Be concise and specific — include relevant "
@@ -91,7 +85,7 @@ def _serialize_admission(adm: dict) -> str:
     return "\n".join(lines)
 
 
-#Strategy: discharge_only
+# Strategy: discharge_only
 
 def build_discharge_only(
     record: dict,
@@ -107,6 +101,7 @@ def build_discharge_only(
         "context_tokens": count_tokens(context),
         "method": "discharge_only",
     }
+
 
 
 # Strategy: full_context
@@ -141,6 +136,7 @@ def build_full_context(
     }
 
 
+
 # Strategy: recency
 
 def build_recency(
@@ -167,7 +163,8 @@ def build_recency(
     }
 
 
-# Strategy: bm25 
+
+# Strategy: bm25
 
 def build_bm25(
     record: dict,
@@ -200,7 +197,8 @@ def build_bm25(
     }
 
 
-# Strategy: semantic_rag 
+
+# Strategy: semantic_rag
 
 _embed_model = None
 
@@ -246,7 +244,8 @@ def build_semantic_rag(
     }
 
 
-#  Strategy: learned 
+
+# Strategy: learned
 
 def build_learned(
     record: dict,
@@ -278,7 +277,7 @@ def build_learned(
     }
 
 
-# Public registry 
+# Public registry
 STRATEGIES: dict[str, callable] = {
     "discharge_only": build_discharge_only,
     "full_context":   build_full_context,

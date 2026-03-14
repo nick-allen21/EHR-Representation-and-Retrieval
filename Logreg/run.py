@@ -35,14 +35,12 @@ _DEFAULT_MODEL_DIR = "data/models/logreg"
 
 _EHR_DS_QA_CSV = "data/physionet.org/files/ehr-ds-qa/1.0.0/mimic_iv_note_qa.csv"
 
-# qa-source → (qa_data path, model_dir, display label)
+# qa-source: (qa_data path, model_dir, display label)
 _QA_SOURCES = {
     "generated": (_DEFAULT_QA_DATA,  "data/models/logreg_generated",  "GPT-4o generated"),
     "ehr_ds_qa": (_EHR_DS_QA_CSV,    "data/models/logreg_ehr_ds_qa",  "EHR-DS-QA (benchmark)"),
 }
 
-
-# ── train ─────────────────────────────────────────────────────────────────────
 
 def _train_one(args: argparse.Namespace, qa_data: str, model_dir: str, label: str) -> dict:
     """Train a single model variant and return its val metrics."""
@@ -111,11 +109,9 @@ def cmd_train(args: argparse.Namespace) -> None:
         if args.qa_data != _DEFAULT_QA_DATA:
             qa_data = args.qa_data
         metrics = _train_one(args, qa_data, model_dir, label)
-        print("\n── Validation metrics ──")
+        print("\nValidation metrics:")
         print(json.dumps(metrics["val"], indent=2))
 
-
-# ── evaluate ──────────────────────────────────────────────────────────────────
 
 def cmd_evaluate(args: argparse.Namespace) -> None:
     from Logreg.data_loader import load_and_merge
@@ -160,8 +156,6 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
         print(f"Results saved to {args.output}")
 
 
-# ── select ────────────────────────────────────────────────────────────────────
-
 def cmd_select(args: argparse.Namespace) -> None:
     from Logreg.selector import ChunkSelector
 
@@ -184,8 +178,6 @@ def cmd_select(args: argparse.Namespace) -> None:
         print(chunk["text"][:400])
         print("─" * 60)
 
-
-# ── main ──────────────────────────────────────────────────────────────────────
 
 def _add_data_args(p: argparse.ArgumentParser, include_qa_source: bool = False) -> None:
     p.add_argument("--timelines", default=_DEFAULT_TIMELINES,

@@ -1,20 +1,13 @@
 """Local HuggingFace model inference with disk-based response caching.
 
-Same external interface as LLMRunner (generate / generate_batch / stats) so
-run_evaluation.py works without modification — just swap the runner class.
+Same interface as LLMRunner (generate / generate_batch / stats) so
+run_evaluation.py works without modification -- just swap the runner class.
 
-GPU batching strategy
----------------------
-Unlike the async OpenAI runner, HF inference is synchronous and GPU-bound.
-generate_batch() checks the cache for all items first, then processes all
-uncached items in batches of `batch_size` through the model.  Results are
+HF inference is synchronous and GPU-bound. generate_batch() checks the cache
+first, then processes uncached items in batches through the model. Results are
 cached after each batch so partial runs are recoverable.
 
-Supported models (tested tokenizers; GPU runs pending)
-------------------------------------------------------
-- meta-llama/Llama-3.1-8B-Instruct       (gated — requires HF_TOKEN)
-- mistralai/Mistral-7B-Instruct-v0.3     (open)
-- microsoft/Phi-3-mini-4k-instruct       (open, 4k context)
+Tested with Llama-3.1-8B-Instruct, Mistral-7B-Instruct-v0.3, Phi-3-mini-4k-instruct.
 """
 
 from __future__ import annotations
@@ -43,18 +36,12 @@ def _cache_key(model_id: str, messages: list[dict]) -> str:
 class HFRunner:
     """Local HuggingFace causal-LM runner with response caching.
 
-    Parameters
-    ----------
-    model_id:
-        HuggingFace model identifier, e.g. 'meta-llama/Meta-Llama-3-8B-Instruct'.
-    cache_dir:
-        Directory for JSON response cache (same format as LLMRunner).
-    batch_size:
-        Number of prompts to process per GPU forward pass.
-    device_map:
-        Passed to ``from_pretrained`` — 'auto' distributes across all GPUs.
-    torch_dtype:
-        Torch dtype string; 'float16' is recommended for 7-8B models on L40S.
+    Args:
+        model_id:   HuggingFace model identifier, e.g. 'meta-llama/Meta-Llama-3-8B-Instruct'.
+        cache_dir:  Directory for JSON response cache (same format as LLMRunner).
+        batch_size: Number of prompts to process per GPU forward pass.
+        device_map: Passed to from_pretrained -- 'auto' distributes across all GPUs.
+        torch_dtype: Torch dtype string; 'float16' recommended for 7-8B models on L40S.
     """
 
     def __init__(
@@ -108,8 +95,6 @@ class HFRunner:
             "Model loaded: %s (max_position_embeddings=%d)",
             model_id, self._max_model_len,
         )
-
-    # ── Core batch inference (synchronous) 
 
     def _batch_generate(
         self,
@@ -175,8 +160,6 @@ class HFRunner:
 
         return results
 
-    # ── Public interface (mirrors LLMRunner) ─────────────────────────────────
-
     async def generate(
         self,
         system_prompt: str,
@@ -229,13 +212,13 @@ class HFRunner:
     ) -> list[dict]:
         """Batch-process items, checking cache first and batching GPU work.
 
-        Each item must have a ``user_prompt`` key.  Returns results in the same
-        order as *items*, with the original item fields merged into each result.
+        Each item must have a 'user_prompt' key. Returns results in the same
+        order as items, with the original item fields merged into each result.
         """
         results: list[dict | None] = [None] * len(items)
         uncached: list[tuple[int, dict, list[dict], str]] = []
 
-        # --- Cache check pass ---
+        # cache check pass
         for i, item in enumerate(items):
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -258,7 +241,7 @@ class HFRunner:
                 self.batch_size,
             )
 
-        # GPU inference in sub-batches 
+        # GPU inference in sub-batches
         for batch_start in range(0, len(uncached), self.batch_size):
             batch = uncached[batch_start : batch_start + self.batch_size]
             msgs_batch = [msgs for _, _, msgs, _ in batch]
@@ -294,8 +277,6 @@ class HFRunner:
             )
 
         return results  # type: ignore[return-value]
-
-    #  Stats 
 
     @property
     def stats(self) -> dict:

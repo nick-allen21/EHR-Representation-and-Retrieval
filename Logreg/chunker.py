@@ -16,17 +16,18 @@ from __future__ import annotations
 
 import re
 
-# ── Section header detection ──────────────────────────────────────────────────
-# Matches lines that look like a MIMIC-IV discharge summary header:
-#   "History of Present Illness:"   (Title Case with colon)
-#   "PHYSICAL EXAMINATION"          (ALL CAPS, no colon needed)
+### CITATION: Used Claude 4.6 Opus to help generate the regex patterns and
+### the _SECTION_MAP clinical category vocabulary below.
+
+# Section header detection
+# Matches MIMIC-IV discharge summary headers (Title Case + colon, or ALL CAPS)
 _HEADER_RE = re.compile(
     r"^[ \t]*([A-Z][A-Za-z0-9 /\-]+:)\s*$"   # Title Case + colon
     r"|^[ \t]*([A-Z][A-Z0-9 /\-]{3,})\s*$",  # ALL CAPS (4+ chars)
     re.MULTILINE,
 )
 
-# Map header text → broad clinical category
+# Map header text to broad clinical category
 _SECTION_MAP: list[tuple[re.Pattern, str]] = [
     (re.compile(r"allerg",                      re.I), "allergies"),
     (re.compile(r"chief\s+complaint",           re.I), "chief_complaint"),
@@ -80,8 +81,6 @@ def _classify_section(header_text: str) -> str:
     return "other"
 
 
-# ── Section-based chunking ────────────────────────────────────────────────────
-
 def split_by_sections(
     note_text: str,
     max_section_tokens: int = 200,
@@ -91,7 +90,7 @@ def split_by_sections(
     Falls back to the whole note as a single chunk if fewer than 3 sections
     are detected (malformed / very short note).
 
-    Sections exceeding *max_section_tokens* are automatically sub-split into
+    Sections exceeding max_section_tokens are automatically sub-split into
     overlapping fixed-size windows so that token-F1 weak supervision works
     well even for long sections (e.g., Hospital Course, large lab blocks).
     """
@@ -149,8 +148,6 @@ def split_by_sections(
     return result
 
 
-# ── Fixed-size chunking ───────────────────────────────────────────────────────
-
 def split_fixed_size(
     note_text: str,
     chunk_tokens: int = 200,
@@ -183,8 +180,6 @@ def split_fixed_size(
 
     return chunks
 
-
-# ── Public API ────────────────────────────────────────────────────────────────
 
 def chunk_note(
     note_text: str,

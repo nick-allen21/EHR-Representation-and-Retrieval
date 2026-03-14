@@ -1,3 +1,5 @@
+### CITATION: Used Claude 4.6 Opus to help write the docstring and feature layout
+### documentation below.
 """Feature extraction for (question, chunk) pairs.
 
 Feature vector layout (F dimensions total):
@@ -64,8 +66,11 @@ from sklearn.preprocessing import normalize
 
 from Logreg.chunker import SECTION_CATEGORIES
 
-# ── Text-signal regexes (Group A) ─────────────────────────────────────────────
+# Text-signal regexes (Group A)
 
+
+### CITATION: Used Claude 4.6 Opus to help generate regex patterns for temporal markers,
+### critical events, and abnormal lab flags below.
 # Temporal markers: relative time expressions common in clinical notes
 _TEMPORAL_MARKER_RE = re.compile(
     r"\b("
@@ -106,8 +111,9 @@ _ABNORMAL_LAB_RE = re.compile(
 # ISO timestamp embedded by event serializers: "2180-06-26 22:45:00" or "2180-06-26"
 _TIMESTAMP_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)\b")
 
-# ── Group D helpers ───────────────────────────────────────────────────────────
+# Group D helpers
 
+### CITATION: Used Claude 4.6 Opus to help generate the stopword list below.
 # Stopwords to exclude from content_word_overlap
 _STOPWORDS = frozenset({
     "a", "an", "the", "is", "was", "were", "be", "been", "being",
@@ -183,7 +189,9 @@ def _extract_temporal_meta(
     except (ValueError, OverflowError):
         return 0.5, 0.0, 0.0, 1.0
 
-# ── Question type taxonomy ────────────────────────────────────────────────────
+### CITATION: Used Claude 4.6 Opus to help generate the question type keyword
+### vocabulary below.
+# Question type taxonomy
 
 _QUESTION_TYPE_KEYWORDS: list[tuple[str, list[str]]] = [
     ("medications", ["medication", "drug", "prescribed", "discharge on",
@@ -217,7 +225,7 @@ def _token_overlap(text_a: str, text_b: str) -> float:
     return len(toks_a & toks_b) / len(toks_a)
 
 
-# ── Feature extractor ─────────────────────────────────────────────────────────
+# Feature extractor
 
 class FeatureExtractor:
     """Extract a fixed-length numeric feature vector for each (question, chunk) pair.
@@ -241,8 +249,6 @@ class FeatureExtractor:
         self.tfidf: TfidfVectorizer | None = None
         self._embed_model = None
 
-    # ── Fitting ───────────────────────────────────────────────────────────────
-
     def fit(self, texts: list[str]) -> "FeatureExtractor":
         """Fit the TF-IDF vectorizer on a corpus of text (questions + chunks)."""
         self.tfidf = TfidfVectorizer(
@@ -253,8 +259,6 @@ class FeatureExtractor:
         )
         self.tfidf.fit(texts)
         return self
-
-    # ── Embedding helpers ─────────────────────────────────────────────────────
 
     def _get_embed_model(self):
         if self._embed_model is None:
@@ -277,8 +281,6 @@ class FeatureExtractor:
             show_progress_bar=len(texts) > 500,
             normalize_embeddings=True,
         )
-
-    # ── Core extraction ───────────────────────────────────────────────────────
 
     def extract_batch(
         self,
@@ -303,7 +305,7 @@ class FeatureExtractor:
 
         chunk_texts = [c["text"] for c in chunks]
 
-        # ── TF-IDF similarity ─────────────────────────────────────────────────
+        # TF-IDF similarity
         if self.tfidf is not None:
             q_tfidf = normalize(self.tfidf.transform(questions), norm="l2")
             c_tfidf = normalize(self.tfidf.transform(chunk_texts), norm="l2")
@@ -312,7 +314,7 @@ class FeatureExtractor:
         else:
             tfidf_sim = np.zeros(N)
 
-        # ── Embedding similarity ──────────────────────────────────────────────
+        # Embedding similarity
         if self.use_embeddings:
             if q_embeddings is None:
                 q_embeddings = self.embed(questions)
@@ -322,17 +324,17 @@ class FeatureExtractor:
         else:
             embed_sim = np.zeros(N)
 
-        # ── Lexical overlap ───────────────────────────────────────────────────
+        # Lexical overlap
         lexical = np.array([
             _token_overlap(q, c["text"])
             for q, c in zip(questions, chunks)
         ])
 
-        # ── Structural features ───────────────────────────────────────────────
+        # Structural features
         position   = np.array([c.get("position", 0.5) for c in chunks])
         log_length = np.log1p([len(c["text"].split()) for c in chunks])
 
-        # ── Group A: text-signal features ────────────────────────────────────
+        # Group A: text-signal features
         has_temporal_marker = np.array([
             float(_count_temporal_markers(c["text"]) > 0) for c in chunks
         ])
@@ -347,8 +349,8 @@ class FeatureExtractor:
             float(bool(_ABNORMAL_LAB_RE.search(c["text"]))) for c in chunks
         ])
 
-        # ── Group B: temporal proximity features ─────────────────────────────
-        # Reads _dischtime from chunk dict (set by build_dataset / selector.select)
+        # Group B: temporal proximity features
+        # reads _dischtime from chunk dict (set by build_dataset / selector.select)
         temporal_rows = np.array([
             _extract_temporal_meta(c["text"], c.get("_dischtime"))
             for c in chunks
@@ -358,7 +360,7 @@ class FeatureExtractor:
         is_within_1week   = temporal_rows[:, 2]
         has_no_timestamp  = temporal_rows[:, 3]
 
-        # ── Section one-hot ───────────────────────────────────────────────────
+        # Section one-hot
         n_sec = len(SECTION_CATEGORIES)
         sec_onehot = np.zeros((N, n_sec))
         for i, c in enumerate(chunks):
@@ -366,7 +368,7 @@ class FeatureExtractor:
             idx = SECTION_CATEGORIES.index(sec) if sec in SECTION_CATEGORIES else SECTION_CATEGORIES.index("other")
             sec_onehot[i, idx] = 1.0
 
-        # ── Question-type one-hot ─────────────────────────────────────────────
+        # Question-type one-hot
         n_qt = len(QUESTION_TYPES)
         qt_onehot = np.zeros((N, n_qt))
         qt_indices = []
@@ -376,11 +378,10 @@ class FeatureExtractor:
             qt_onehot[i, idx] = 1.0
             qt_indices.append(idx)
 
-        # ── Section × question-type interactions ──────────────────────────────
+        # Section x question-type interactions
         interactions = (sec_onehot[:, :, None] * qt_onehot[:, None, :]).reshape(N, -1)
 
-        # ── Group C: new signal × question-type interactions ──────────────────
-        # Indices into QUESTION_TYPES: medications=0, diagnosis=1, labs=2, procedure=4
+        # Group C: signal x question-type interactions
         _qt = {qt: QUESTION_TYPES.index(qt) for qt in QUESTION_TYPES}
         new_interactions = np.column_stack([
             has_abnormal_lab    * qt_onehot[:, _qt["labs"]],
@@ -393,7 +394,7 @@ class FeatureExtractor:
             has_temporal_marker * qt_onehot[:, _qt["diagnosis"]],
         ])
 
-        # ── Group D: precision section header + content features ──────────────
+        # Group D: precision section header + content features
         content_word_overlap = np.array([
             _content_word_overlap(q, c["text"])
             for q, c in zip(questions, chunks)
@@ -407,7 +408,7 @@ class FeatureExtractor:
         has_discharge_labs_hdr = np.array([float(bool(_DISCHARGE_LABS_RE.search(h))) for h in hdr])
         has_admission_labs_hdr = np.array([float(bool(_ADMISSION_LABS_RE.search(h))) for h in hdr])
 
-        # ── Assemble ──────────────────────────────────────────────────────────
+        # Assemble final feature vector
         X = np.column_stack([
             embed_sim,
             tfidf_sim,
@@ -462,8 +463,6 @@ class FeatureExtractor:
             "has_admission_labs_hdr",
         ]
         return names
-
-    # ── Serialization ─────────────────────────────────────────────────────────
 
     def save(self, path: str | Path) -> None:
         """Save TF-IDF state to disk. The embedding model is not saved (reloaded on demand)."""
