@@ -57,6 +57,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 - [x] **Response caching infrastructure** *(Nick)* — SHA-256 disk cache in `data/results/cache/` for $0 re-runs; reasoning-model detection for o-series API quirks (`max_completion_tokens`, no `temperature`)
 - [x] **Git LFS data sharing** *(Nick)* — `patient_timelines.json` and `qa_pairs.json` tracked via LFS so collaborators don't need to regenerate
 - [x] **Per-difficulty breakdown** *(Nick)* — Metrics split by question difficulty (easy/medium/hard) implemented in `analysis.py`
+- [x] **Publication figures** *(Nick)* — 12 publication-quality plots for dev set + 8 for verified set covering efficiency, feature importance, model lift, heatmaps, win rates, and more (`scripts/generate_plots.py`)
 
 ### TODO
 
@@ -99,6 +100,7 @@ All patient data is from **MIMIC-IV** (PhysioNet credentialed access required). 
 | — Evidence support metrics | | |
 | — Feature group ablations | | |
 | — Error analysis (list omissions, temporal confusion, distractor overlap) | | |
+| **Publication figures** | Nick | **Done (3/14/26)** — 12 plots (dev) + 8 plots (verified) in `data/results/plots/`; see `Progress/PLOTS.md` |
 | **Final write-up** | | |
 | **Clean up code and turn in** | | |
 | **Project poster** | | |
@@ -491,9 +493,11 @@ Progress/                    per-TODO agent progress logs
 ├── CORE_COMPARISON_AGENT.md Phase 1b — core comparison (Nick)
 ├── MULTI_MODEL_GEN.md       Phase 2 — multi-model generalization (Nick)
 ├── E2E_TEST.md              E2E test + verified QA eval progress
-└── FEATURE_ENRICHMENT.md    Feature enrichment + dual QA source (Niki)
+├── FEATURE_ENRICHMENT.md    Feature enrichment + dual QA source (Niki)
+└── PLOTS.md                 Publication figure generation (Nick)
 
 scripts/                     FarmShare setup, SLURM batch jobs
+├── generate_plots.py        publication-quality figure generation (12 plots × 2 datasets)
 ├── run_hf_eval.sbatch       SLURM: HF model eval on 200-patient dev set
 └── run_verified_eval.sbatch SLURM: HF model eval on 70-patient verified set
 ```
@@ -592,6 +596,21 @@ python -m Evaluation.llm_judge --results-dir data/results --judge-model gpt-4o
 Judged results are written to `data/results/judged/`. The judge uses gpt-4o with a 1-5 clinical correctness rubric.
 
 Results saved to `data/results/{model_slug}__{method}.json`. LLM responses are cached in `data/results/cache/` to avoid re-running identical prompts.
+
+### Step 8: Generate publication figures
+
+```bash
+# All figures for both datasets (dev + verified)
+python scripts/generate_plots.py
+
+# Dev set only
+python scripts/generate_plots.py --dataset dev
+
+# Verified set only
+python scripts/generate_plots.py --dataset verified
+```
+
+Figures saved to `data/results/plots/dev/` (12 plots) and `data/results/plots/verified/` (8 plots). See `Progress/PLOTS.md` for the full inventory.
 
 ---
 
